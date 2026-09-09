@@ -67,7 +67,7 @@ fn parse_line(line : String, line_no : Int) -> Result[Register, String] {
 
 test "parse_device reads comments and registers" {
   let text =
-    "# washer line 1\n"
+    "# example point table\n"
     + "coil_temp 40001 float32 R degC jsonb->coil_temp\n"
     + "\n"
     + "conveyor  40003 bool RW jsonb->conveyor_run\n"

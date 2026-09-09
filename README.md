@@ -8,18 +8,18 @@
 
 ## 一、项目一页纸（报名用）
 
-- **项目概述**：面向工业 MES 采集系统（Modbus PLC 轮询 → MQTT → PostgreSQL/TimescaleDB，每类设备一张表、JSONB 存数据），为"清洗机/热处理炉"等设备的 **Modbus 点表 YAML/文本**做静态检查。核心是一个纯函数校验引擎 + 一个命令行工具。
+- **项目概述**：面向工业设备接入与数据采集场景，对 **Modbus 寄存器点表**做通用静态校验——不绑定任何具体设备、厂商或上位机系统。核心是一个与设备无关的纯函数校验引擎：输入点表，输出可定位到行号的问题清单，并附带一个可直接运行的命令行工具。
 - **工程目标**：把"人工核点表"这种易漏、慢、不可复现的工作，变成"一行命令、可进 CI"的确定性检查；输出清晰、模块化、带测试、可维护的 MoonBit 工程。
 - **技术路线**：`model`（数据模型/辅助）→ `parser`（文本→Device）→ `validator`（规则）→ `reporter`（报告）→ `cli`（入口）。全程无副作用，核心库**不依赖文件 IO**，便于单测；Modbus 区域由地址前缀自动判定。
 - **可行性**：范围自包含（解析 + 校验），不触碰数据库/网络；MoonBit 的代数数据类型与模式匹配非常契合点表建模与报错；MVP 体量可控（数百行），并可按阶段演进到数千行。
-- **真实需求**：点表地址重叠、重名、类型与长度不匹配，是 MES 设备接入时最常见的踩坑点；该项目正是为这个痛点而生。
+- **真实需求**：点表地址重叠、寄存器重名、类型与字宽不匹配，是 Modbus 设备接入与现场调试时最常见的踩坑点；本项目正是为这个通用痛点而生。
 
 ## 二、点表格式
 
 一行一个寄存器，`#` 开头为注释；Modbus 区域由地址前缀自动判定（线圈 1-9999、离散输入 10001-19999、输入寄存器 30001-39999、保持寄存器 40001-49999）。
 
 ```
-# washer line 1 点表
+# 示例点表（保持寄存器）
 # 名称        地址    类型     读写  单位   JSONB 字段
 coil_temp   40001   float32  R    degC  jsonb->coil_temp
 conveyor    40003   bool     RW         jsonb->conveyor_run
@@ -59,8 +59,8 @@ moon run cmd/main -- --demo
 moon run cmd/main -- "$(cat my_point_table.txt)"
 
 # 4a. 用仓库自带示例验证（可复现演示）
-moon run cmd/main -- "$(cat examples/washer_line1.txt)"      # 正确示例：应无问题
-moon run cmd/main -- "$(cat examples/washer_line1_bad.txt)"  # 错误示例：命中多条规则
+moon run cmd/main -- "$(cat examples/point_table_ok.txt)"    # 正确示例：应无问题
+moon run cmd/main -- "$(cat examples/point_table_bad.txt)"   # 错误示例：命中多条规则
 
 # 5. 输出 JSON 报告（便于接入 CI / 被其他工具消费）
 moon run cmd/main -- --json "$(cat my_point_table.txt)"
@@ -123,7 +123,7 @@ cmd/main/main.mbt            CLI 入口（读文件 / 内置演示 → 解析 �
 |----------|--------------|
 | 以 MoonBit 为主要实现语言 | 全部核心代码为 `.mbt` |
 | 使用 AI 编程工具 | 见"八、AI 使用说明"，并在复盘文档中说明 |
-| 真实需求 → 可运行/可测试/可维护 | MES 点表校验；`moon test` + `moon run`；模块化纯函数设计 |
+| 真实需求 → 可运行/可测试/可维护 | Modbus 点表校验；`moon test` + `moon run`；模块化纯函数设计 |
 | 公开仓库 + 完整 commit 历史 | 分阶段公开提交（见六） |
 | README + 可运行示例 + 可复现演示 | 本文件 + `moon run cmd/main` 内置演示 |
 | CI + 测试 | `.github/workflows/ci.yml` + 内联/黑盒单测 |

@@ -87,7 +87,7 @@ fn run_text(text : String, json_mode : Bool) -> Unit {
 /// A small demo table that intentionally contains one address overlap so the
 /// linter output is easy to see.
 fn example_text() -> String {
-  "# washer line 1 - demo (contains one intentional overlap)\n"
+  "# example point table - demo (contains one intentional overlap)\n"
   + "coil_temp   40001 float32 R  degC  jsonb->coil_temp\n"
   + "conveyor    40003 bool    RW        jsonb->conveyor_run\n"
   + "tank_level  40004 uint16  R   mm    jsonb->tank_level\n"

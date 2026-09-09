@@ -23,4 +23,4 @@ keywords = ["modbus", "linter", "mes", "plc", "cli", "validation"]
 
 preferred_target = "wasm-gc"
 
-description = "Modbus point-table linter for MES device onboarding: catches duplicate register names, out-of-range and overlapping addresses, oversized address gaps and conflicting JSONB mappings."
+description = "General-purpose Modbus point-table linter: catches duplicate register names, out-of-range and overlapping addresses, oversized address gaps and conflicting JSONB field mappings."
