@@ -8,9 +8,10 @@
 //      (accounting for the word count of each type).
 //   5. A non-empty jsonb field should be a plain identifier (warning).
 
+///|
 /// Run every rule and return all findings.
 pub fn lint(dev : Device) -> Array[Issue] {
-  let mut issues : Array[Issue] = []
+  let issues : Array[Issue] = []
   let regs = dev.registers
 
   // Rule 1: duplicate names.
@@ -21,11 +22,11 @@ pub fn lint(dev : Device) -> Array[Issue] {
           mk_issue(
             Error,
             regs[j].line,
-            "duplicate register name '"
-            + regs[j].name
-            + "' (first defined at line "
-            + regs[i].line.to_string()
-            + ")",
+            "duplicate register name '" +
+            regs[j].name +
+            "' (first defined at line " +
+            regs[i].line.to_string() +
+            ")",
           ),
         )
       }
@@ -41,9 +42,9 @@ pub fn lint(dev : Device) -> Array[Issue] {
         mk_issue(
           Error,
           a.line,
-          "address "
-          + a.address.to_string()
-          + " is outside any standard Modbus area (coils 1-9999, DI 10001-19999, IR 30001-39999, HR 40001-49999)",
+          "address " +
+          a.address.to_string() +
+          " is outside any standard Modbus area (coils 1-9999, DI 10001-19999, IR 30001-39999, HR 40001-49999)",
         ),
       )
       continue
@@ -54,13 +55,13 @@ pub fn lint(dev : Device) -> Array[Issue] {
         mk_issue(
           Error,
           a.line,
-          "register '"
-          + a.name
-          + "' spans past the end of its Modbus area (local "
-          + lo.to_string()
-          + ".."
-          + hi.to_string()
-          + ", max 9999)",
+          "register '" +
+          a.name +
+          "' spans past the end of its Modbus area (local " +
+          lo.to_string() +
+          ".." +
+          hi.to_string() +
+          ", max 9999)",
         ),
       )
     }
@@ -80,19 +81,19 @@ pub fn lint(dev : Device) -> Array[Issue] {
           mk_issue(
             Error,
             a.line,
-            "register '"
-            + a.name
-            + "' (local "
-            + lo.to_string()
-            + ".."
-            + hi.to_string()
-            + ") overlaps '"
-            + b.name
-            + "' (local "
-            + lo2.to_string()
-            + ".."
-            + hi2.to_string()
-            + ")",
+            "register '" +
+            a.name +
+            "' (local " +
+            lo.to_string() +
+            ".." +
+            hi.to_string() +
+            ") overlaps '" +
+            b.name +
+            "' (local " +
+            lo2.to_string() +
+            ".." +
+            hi2.to_string() +
+            ")",
           ),
         )
       }
@@ -106,9 +107,9 @@ pub fn lint(dev : Device) -> Array[Issue] {
         mk_issue(
           Warning,
           r.line,
-          "jsonb field '"
-          + r.jsonb
-          + "' is not a plain identifier (expected e.g. jsonb->coil_temp)",
+          "jsonb field '" +
+          r.jsonb +
+          "' is not a plain identifier (expected e.g. jsonb->coil_temp)",
         ),
       )
     }
@@ -123,7 +124,7 @@ pub fn lint(dev : Device) -> Array[Issue] {
     }
     // hi = 该寄存器占用的最后一个本地地址
     let hi = a.address - area_base(area) + word_count(a.rtype)
-    var next_lo = -1
+    let mut next_lo = -1
     for j = 0; j < regs.length(); j = j + 1 {
       if j == i {
         continue
@@ -146,13 +147,13 @@ pub fn lint(dev : Device) -> Array[Issue] {
           mk_issue(
             Warning,
             a.line,
-            "register '"
-            + a.name
-            + "' 与下一个寄存器之间有 "
-            + gap.to_string()
-            + " 字地址间隙（阈值 "
-            + max_gap().to_string()
-            + "），可能存在漏配或地址笔误",
+            "register '" +
+            a.name +
+            "' 与下一个寄存器之间有 " +
+            gap.to_string() +
+            " 字地址间隙（阈值 " +
+            max_gap().to_string() +
+            "），可能存在漏配或地址笔误",
           ),
         )
       }
@@ -170,13 +171,13 @@ pub fn lint(dev : Device) -> Array[Issue] {
           mk_issue(
             Warning,
             regs[j].line,
-            "register '"
-            + regs[j].name
-            + "' 与 '"
-            + regs[i].name
-            + "' 映射到同一个 JSONB 字段 '"
-            + regs[j].jsonb
-            + "'，采集时会互相覆盖",
+            "register '" +
+            regs[j].name +
+            "' 与 '" +
+            regs[i].name +
+            "' 映射到同一个 JSONB 字段 '" +
+            regs[j].jsonb +
+            "'，采集时会互相覆盖",
           ),
         )
       }
@@ -186,11 +187,13 @@ pub fn lint(dev : Device) -> Array[Issue] {
   issues
 }
 
+///|
 /// 允许的最大地址间隙（字）；超过则提示可能漏配。
 fn max_gap() -> Int {
   16
 }
 
+///|
 /// Convert an address + type into its [low, high] local-word range (1-based).
 fn local_range(addr : Int, rtype : RegisterType) -> (Int, Int) {
   let base = area_base(area_of(addr))
@@ -199,6 +202,7 @@ fn local_range(addr : Int, rtype : RegisterType) -> (Int, Int) {
   (lo, hi)
 }
 
+///|
 test "lint flags an overlap between a float32 and an int16" {
   let r1 = {
     name: "a",
@@ -218,9 +222,10 @@ test "lint flags an overlap between a float32 and an int16" {
     jsonb: "",
     line: 2,
   }
-  assert_eq(lint({ registers: [r1, r2] }).length() > 0, true)
+  assert_eq(lint({ registers: [r1, r2], }).length() > 0, true)
 }
 
+///|
 test "lint passes disjoint registers" {
   let r1 = {
     name: "a",
@@ -240,9 +245,10 @@ test "lint passes disjoint registers" {
     jsonb: "",
     line: 2,
   }
-  assert_eq(lint({ registers: [r1, r2] }).length(), 0)
+  assert_eq(lint({ registers: [r1, r2], }).length(), 0)
 }
 
+///|
 test "lint flags duplicate names" {
   let r1 = {
     name: "x",
@@ -262,9 +268,10 @@ test "lint flags duplicate names" {
     jsonb: "",
     line: 2,
   }
-  assert_eq(lint({ registers: [r1, r2] }).length() > 0, true)
+  assert_eq(lint({ registers: [r1, r2], }).length() > 0, true)
 }
 
+///|
 test "lint flags out-of-range address" {
   let r = {
     name: "x",
@@ -275,9 +282,10 @@ test "lint flags out-of-range address" {
     jsonb: "",
     line: 1,
   }
-  assert_eq(lint({ registers: [r] }).length() > 0, true)
+  assert_eq(lint({ registers: [r], }).length() > 0, true)
 }
 
+///|
 test "lint accepts a float64 that fits exactly at the boundary" {
   let r = {
     name: "x",
@@ -288,9 +296,10 @@ test "lint accepts a float64 that fits exactly at the boundary" {
     jsonb: "",
     line: 1,
   }
-  assert_eq(lint({ registers: [r] }).length(), 0)
+  assert_eq(lint({ registers: [r], }).length(), 0)
 }
 
+///|
 test "lint flags a float64 that overflows the area" {
   let r = {
     name: "x",
@@ -301,9 +310,10 @@ test "lint flags a float64 that overflows the area" {
     jsonb: "",
     line: 1,
   }
-  assert_eq(lint({ registers: [r] }).length() > 0, true)
+  assert_eq(lint({ registers: [r], }).length() > 0, true)
 }
 
+///|
 test "lint warns about a large address gap" {
   // 40001 之后直接跳到 40050，中间 48 字没有任何点，应提示漏配
   let r1 = {
@@ -324,9 +334,10 @@ test "lint warns about a large address gap" {
     jsonb: "jsonb->b",
     line: 2,
   }
-  assert_eq(lint({ registers: [r1, r2] }).length() > 0, true)
+  assert_eq(lint({ registers: [r1, r2], }).length() > 0, true)
 }
 
+///|
 test "lint does not warn about a small address gap" {
   let r1 = {
     name: "a",
@@ -346,9 +357,10 @@ test "lint does not warn about a small address gap" {
     jsonb: "jsonb->b",
     line: 2,
   }
-  assert_eq(lint({ registers: [r1, r2] }).length(), 0)
+  assert_eq(lint({ registers: [r1, r2], }).length(), 0)
 }
 
+///|
 test "lint warns when two registers share one jsonb field" {
   let r1 = {
     name: "a",
@@ -368,5 +380,5 @@ test "lint warns when two registers share one jsonb field" {
     jsonb: "jsonb->same",
     line: 2,
   }
-  assert_eq(lint({ registers: [r1, r2] }).length() > 0, true)
+  assert_eq(lint({ registers: [r1, r2], }).length() > 0, true)
 }

@@ -1,7 +1,6 @@
-// import {
-//   "dengxinxin/modbus_lint" @lib,
-// }
+import {
+  "aoliaoxiaoxin/modbus_lint",
+  "moonbitlang/core/env",
+}
 
-options(
-  "is-main": true,
-)
+pkgtype(kind: "executable")

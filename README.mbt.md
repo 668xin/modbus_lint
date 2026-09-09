@@ -25,7 +25,7 @@ Access: `R` `W` `RW`.
 
 ## Usage
 
-```moonbit
+```moonbit nocheck
 let dev = @modbus_lint.parse_device(text)?
 let issues = @modbus_lint.lint(dev)
 println(@modbus_lint.render(issues))

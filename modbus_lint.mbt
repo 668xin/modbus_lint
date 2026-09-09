@@ -4,6 +4,7 @@
 // parser, validator and reporter. Everything here is side-effect free so it is
 // easy to unit test.
 
+///|
 /// Register data types we understand. Word count follows the Modbus convention
 /// (1 word = 2 bytes = 16 bits).
 pub enum RegisterType {
@@ -16,6 +17,7 @@ pub enum RegisterType {
   TFloat64 // 4 words
 }
 
+///|
 /// Access mode of a register.
 pub enum Access {
   Read
@@ -23,12 +25,14 @@ pub enum Access {
   ReadWrite
 }
 
+///|
 /// Severity of a lint finding.
 pub enum Severity {
   Error
   Warning
 }
 
+///|
 /// A single lint finding.
 pub struct Issue {
   severity : Severity
@@ -36,6 +40,7 @@ pub struct Issue {
   message : String
 }
 
+///|
 /// A single register described in a point table.
 pub struct Register {
   name : String
@@ -47,11 +52,13 @@ pub struct Register {
   line : Int
 }
 
+///|
 /// A parsed device: an ordered list of registers.
 pub struct Device {
   registers : Array[Register]
 }
 
+///|
 /// Number of 16-bit words a register type occupies.
 pub fn word_count(rtype : RegisterType) -> Int {
   match rtype {
@@ -65,6 +72,7 @@ pub fn word_count(rtype : RegisterType) -> Int {
   }
 }
 
+///|
 /// Map a 1-based Modbus address to its area id.
 ///   0 = coils (1..9999), 1 = discrete inputs (10001..19999),
 ///   3 = input registers (30001..39999), 4 = holding registers (40001..49999).
@@ -83,6 +91,7 @@ fn area_of(addr : Int) -> Int {
   }
 }
 
+///|
 /// First address of the area that `area_of` returns (-1 -> 0).
 fn area_base(area : Int) -> Int {
   match area {
@@ -94,6 +103,7 @@ fn area_base(area : Int) -> Int {
   }
 }
 
+///|
 /// Parse a non-negative / signed decimal integer without relying on stdlib
 /// number parsing, so the behaviour is predictable across targets.
 fn parse_int(s : String) -> Result[Int, String] {
@@ -105,7 +115,7 @@ fn parse_int(s : String) -> Result[Int, String] {
   if neg && s.length() == 1 {
     return Err("invalid number: " + s)
   }
-  var v = 0
+  let mut v = 0
   let zero = '0'.to_int()
   for i = start; i < s.length(); i = i + 1 {
     let c = s[i]
@@ -120,6 +130,7 @@ fn parse_int(s : String) -> Result[Int, String] {
   Ok(v)
 }
 
+///|
 /// Parse a register type keyword.
 fn parse_type(s : String) -> Result[RegisterType, String] {
   if s == "bool" {
@@ -138,13 +149,14 @@ fn parse_type(s : String) -> Result[RegisterType, String] {
     Ok(TFloat64)
   } else {
     Err(
-      "unknown type: "
-      + s
-      + " (want bool|int16|uint16|int32|uint32|float32|float64)",
+      "unknown type: " +
+      s +
+      " (want bool|int16|uint16|int32|uint32|float32|float64)",
     )
   }
 }
 
+///|
 /// Parse an access keyword.
 fn parse_access(s : String) -> Result[Access, String] {
   if s == "R" {
@@ -158,6 +170,7 @@ fn parse_access(s : String) -> Result[Access, String] {
   }
 }
 
+///|
 /// True when `s` is a usable JSONB field path such as `jsonb->coil_temp`.
 fn is_ident(s : String) -> Bool {
   if s.length() == 0 {
@@ -165,14 +178,13 @@ fn is_ident(s : String) -> Bool {
   }
   for i = 0; i < s.length(); i = i + 1 {
     let c = s[i]
-    let ok =
-      (c >= 'a' && c <= 'z')
-      || (c >= 'A' && c <= 'Z')
-      || (c >= '0' && c <= '9')
-      || c == '_'
-      || c == '-'
-      || c == '.'
-      || c == '>'
+    let ok = (c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9') ||
+      c == '_' ||
+      c == '-' ||
+      c == '.' ||
+      c == '>'
     if !ok {
       return false
     }
@@ -180,50 +192,54 @@ fn is_ident(s : String) -> Bool {
   true
 }
 
+///|
 /// Convenience constructor for an Issue.
 fn mk_issue(sev : Severity, line : Int, message : String) -> Issue {
-  { severity: sev, line: line, message: message }
+  { severity: sev, line, message, }
 }
 
+///|
 /// Split text into lines, tolerating CRLF, preserving order so the returned
 /// index (plus one) matches the file line number.
 fn split_lines(s : String) -> Array[String] {
-  let mut out : Array[String] = []
-  var cur = ""
+  let out : Array[String] = []
+  let mut cur = StringBuilder()
   for i = 0; i < s.length(); i = i + 1 {
-    let c = s[i]
+    let c = s[i].to_int().unsafe_to_char()
     if c == '\n' {
-      out.push(cur)
-      cur = ""
+      out.push(cur.to_string())
+      cur = StringBuilder()
     } else if c != '\r' {
-      cur = cur + c.to_string()
+      cur.write_char(c)
     }
   }
-  out.push(cur)
+  out.push(cur.to_string())
   out
 }
 
+///|
 /// Split a line on runs of whitespace, dropping empty tokens.
 fn split_ws(s : String) -> Array[String] {
-  let mut out : Array[String] = []
-  var cur = ""
+  let out : Array[String] = []
+  let mut cur = StringBuilder()
   for i = 0; i < s.length(); i = i + 1 {
-    let c = s[i]
+    let c = s[i].to_int().unsafe_to_char()
     if c == ' ' || c == '\t' {
-      if cur.length() > 0 {
-        out.push(cur)
-        cur = ""
+      if !cur.is_empty() {
+        out.push(cur.to_string())
+        cur = StringBuilder()
       }
     } else {
-      cur = cur + c.to_string()
+      cur.write_char(c)
     }
   }
-  if cur.length() > 0 {
-    out.push(cur)
+  if !cur.is_empty() {
+    out.push(cur.to_string())
   }
   out
 }
 
+///|
 test "word_count matches Modbus convention" {
   assert_eq(word_count(TBit), 1)
   assert_eq(word_count(TInt16), 1)
@@ -231,6 +247,7 @@ test "word_count matches Modbus convention" {
   assert_eq(word_count(TFloat64), 4)
 }
 
+///|
 test "area_of classifies standard Modbus addresses" {
   assert_eq(area_of(40001), 4)
   assert_eq(area_of(30001), 3)
@@ -240,13 +257,15 @@ test "area_of classifies standard Modbus addresses" {
   assert_eq(area_of(25000), -1)
 }
 
+///|
 test "parse_int handles signs and rejects garbage" {
   assert_eq(parse_int("123").unwrap(), 123)
   assert_eq(parse_int("-7").unwrap(), -7)
-  assert_eq(parse_int("").is_ok(), false)
-  assert_eq(parse_int("12x").is_ok(), false)
+  assert_eq(parse_int("") is Ok(_), false)
+  assert_eq(parse_int("12x") is Ok(_), false)
 }
 
+///|
 test "is_ident accepts dotted and dashed names" {
   assert_eq(is_ident("jsonb->coil_temp"), true)
   assert_eq(is_ident(""), false)

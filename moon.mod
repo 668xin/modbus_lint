@@ -19,7 +19,7 @@ repository = "https://gitee.com/aoliaoxiaoxin/modbus_lint"
 
 license = "Apache-2.0"
 
-keywords = ["modbus", "linter", "mes", "plc", "cli", "validation"]
+keywords = [ "modbus", "linter", "mes", "plc", "cli", "validation" ]
 
 preferred_target = "wasm-gc"
 

@@ -11,11 +11,12 @@
 // The CLI depends only on moonbitlang/core (`env` + `println`), so it runs
 // anywhere MoonBit runs, without extra dependencies.
 
+///|
 fn main {
   let args = @env.args()
-  var json_mode = false
-  var use_demo = false
-  var lines : Array[String] = []
+  let mut json_mode = false
+  let mut use_demo = false
+  let lines : Array[String] = []
   for i = 0; i < args.length(); i = i + 1 {
     let a = args[i]
     if a == "--json" {
@@ -42,6 +43,7 @@ fn main {
   run_text(join_lines(lines), json_mode)
 }
 
+///|
 /// Print the CLI help text.
 fn print_usage() -> Unit {
   println("modbus_lint - Modbus point table linter")
@@ -54,9 +56,10 @@ fn print_usage() -> Unit {
   println("  --help   显示本帮助")
 }
 
+///|
 /// Join argument lines back into a point-table document.
 fn join_lines(lines : Array[String]) -> String {
-  var out = ""
+  let mut out = ""
   for i = 0; i < lines.length(); i = i + 1 {
     if i > 0 {
       out = out + "\n"
@@ -66,32 +69,34 @@ fn join_lines(lines : Array[String]) -> String {
   out
 }
 
+///|
 /// Parse, lint and print a point-table document.
 fn run_text(text : String, json_mode : Bool) -> Unit {
-  match parse_device(text) {
+  match @modbus_lint.parse_device(text) {
     Err(e) => {
       println("parse error: " + e)
       return
     }
     Ok(dev) => {
-      let issues = lint(dev)
+      let issues = @modbus_lint.lint(dev)
       if json_mode {
-        println(render_json(issues))
+        println(@modbus_lint.render_json(issues))
       } else {
-        println(render(issues))
+        println(@modbus_lint.render(issues))
       }
     }
   }
 }
 
+///|
 /// A small demo table that intentionally contains one address overlap so the
 /// linter output is easy to see.
 fn example_text() -> String {
-  "# example point table - demo (contains one intentional overlap)\n"
-  + "coil_temp   40001 float32 R  degC  jsonb->coil_temp\n"
-  + "conveyor    40003 bool    RW        jsonb->conveyor_run\n"
-  + "tank_level  40004 uint16  R   mm    jsonb->tank_level\n"
-  + "spray_prs   40005 uint16  R   kPa   jsonb->spray_press\n"
-  + "big_val     40010 float32 R         jsonb->big_val\n"
-  + "small_val   40011 int16   R         jsonb->small_val\n"
+  "# example point table - demo (contains one intentional overlap)\n" +
+  "coil_temp   40001 float32 R  degC  jsonb->coil_temp\n" +
+  "conveyor    40003 bool    RW        jsonb->conveyor_run\n" +
+  "tank_level  40004 uint16  R   mm    jsonb->tank_level\n" +
+  "spray_prs   40005 uint16  R   kPa   jsonb->spray_press\n" +
+  "big_val     40010 float32 R         jsonb->big_val\n" +
+  "small_val   40011 int16   R         jsonb->small_val\n"
 }
