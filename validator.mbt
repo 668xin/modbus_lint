@@ -114,7 +114,81 @@ pub fn lint(dev : Device) -> Array[Issue] {
     }
   }
 
+  // Rule 6: 地址间隙过大，可能漏配或地址笔误（Warning）。
+  for i = 0; i < regs.length(); i = i + 1 {
+    let a = regs[i]
+    let area = area_of(a.address)
+    if area < 0 {
+      continue
+    }
+    // hi = 该寄存器占用的最后一个本地地址
+    let hi = a.address - area_base(area) + word_count(a.rtype)
+    var next_lo = -1
+    for j = 0; j < regs.length(); j = j + 1 {
+      if j == i {
+        continue
+      }
+      let b = regs[j]
+      if area_of(b.address) != area {
+        continue
+      }
+      let lo2 = b.address - area_base(area) + 1
+      if lo2 > hi {
+        if next_lo < 0 || lo2 < next_lo {
+          next_lo = lo2
+        }
+      }
+    }
+    if next_lo > 0 {
+      let gap = next_lo - hi - 1
+      if gap > max_gap() {
+        issues.push(
+          mk_issue(
+            Warning,
+            a.line,
+            "register '"
+            + a.name
+            + "' 与下一个寄存器之间有 "
+            + gap.to_string()
+            + " 字地址间隙（阈值 "
+            + max_gap().to_string()
+            + "），可能存在漏配或地址笔误",
+          ),
+        )
+      }
+    }
+  }
+
+  // Rule 7: 多个寄存器映射到同一个 JSONB 字段，采集时会互相覆盖（Warning）。
+  for i = 0; i < regs.length(); i = i + 1 {
+    if regs[i].jsonb.length() == 0 {
+      continue
+    }
+    for j = i + 1; j < regs.length(); j = j + 1 {
+      if regs[i].jsonb == regs[j].jsonb {
+        issues.push(
+          mk_issue(
+            Warning,
+            regs[j].line,
+            "register '"
+            + regs[j].name
+            + "' 与 '"
+            + regs[i].name
+            + "' 映射到同一个 JSONB 字段 '"
+            + regs[j].jsonb
+            + "'，采集时会互相覆盖",
+          ),
+        )
+      }
+    }
+  }
+
   issues
+}
+
+/// 允许的最大地址间隙（字）；超过则提示可能漏配。
+fn max_gap() -> Int {
+  16
 }
 
 /// Convert an address + type into its [low, high] local-word range (1-based).
