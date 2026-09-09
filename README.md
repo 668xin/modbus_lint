@@ -58,6 +58,10 @@ moon run cmd/main -- --demo
 # 4. 校验自己的点表（用 shell 把文件内容作为一个参数传入）
 moon run cmd/main -- "$(cat my_point_table.txt)"
 
+# 4a. 用仓库自带示例验证（可复现演示）
+moon run cmd/main -- "$(cat examples/washer_line1.txt)"      # 正确示例：应无问题
+moon run cmd/main -- "$(cat examples/washer_line1_bad.txt)"  # 错误示例：命中多条规则
+
 # 5. 输出 JSON 报告（便于接入 CI / 被其他工具消费）
 moon run cmd/main -- --json "$(cat my_point_table.txt)"
 

@@ -1,0 +1,9 @@
+# 清洗机 1 号线 - 保持寄存器点表（正确示例）
+# 该表应通过全部校验：无重名、无越界、无重叠、无过大间隙、JSONB 字段唯一
+coil_temp   40001 float32 R  degC  jsonb->coil_temp
+conveyor    40003 bool    RW        jsonb->conveyor_run
+tank_level  40004 uint16  R   mm    jsonb->tank_level
+spray_prs   40005 uint16  R   kPa   jsonb->spray_press
+pump_freq   40006 float32 R   Hz    jsonb->pump_freq
+cycle_cnt   40008 uint32  R         jsonb->cycle_cnt
+alarm_code  40010 uint16  R         jsonb->alarm_code

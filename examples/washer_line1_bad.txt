@@ -1,0 +1,15 @@
+# 清洗机 1 号线 - 含错误的点表（用于演示校验效果）
+# 预期命中：地址重叠、寄存器重名、JSONB 重复映射、地址间隙过大、地址越界
+
+# 1) tank_level 放在 40002，与 coil_temp(占用 40001-40002) 地址重叠
+coil_temp   40001 float32 R  degC  jsonb->coil_temp
+tank_level  40002 int16   R   mm    jsonb->tank_level
+
+# 2) 寄存器重名，且 JSONB 字段与上一行重复（采集时会互相覆盖）
+tank_level  40005 uint16  R   mm    jsonb->tank_level
+
+# 3) 与上一行之间空了 44 个字，疑似漏配或地址笔误
+pump_freq   40050 float32 R   Hz    jsonb->pump_freq
+
+# 4) 地址越出标准 Modbus 区域
+bad_addr    50001 int16   R         jsonb->bad_addr
