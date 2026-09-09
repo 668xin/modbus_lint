@@ -38,6 +38,8 @@ spray_prs   40005   uint16   R    kPa   jsonb->spray_press
 | 3 | 多字寄存器跨出所在区域末尾（如 float32 放在 49999） | Error |
 | 4 | 同区域内两个寄存器地址重叠（按类型字宽计算） | Error |
 | 5 | JSONB 字段不是合法标识符 | Warning |
+| 6 | 地址间隙过大（> 16 字），可能漏配或地址笔误 | Warning |
+| 7 | 多个寄存器映射到同一个 JSONB 字段（采集时互相覆盖） | Warning |
 
 ## 四、使用方法
 
@@ -50,11 +52,34 @@ moon check
 # 2. 运行单元测试
 moon test
 
-# 3. 运行 CLI（不带参数 → 跑内置演示点表）
-moon run cmd/main
+# 3. 运行内置演示点表
+moon run cmd/main -- --demo
 
-# 4. 校验自己的点表
-moon run cmd/main -- my_point_table.txt
+# 4. 校验自己的点表（用 shell 把文件内容作为一个参数传入）
+moon run cmd/main -- "$(cat my_point_table.txt)"
+
+# 5. 输出 JSON 报告（便于接入 CI / 被其他工具消费）
+moon run cmd/main -- --json "$(cat my_point_table.txt)"
+
+# 6. 快速校验几行
+moon run cmd/main -- "coil_temp 40001 float32 R degC jsonb->coil_temp"
+
+# 7. 查看用法
+moon run cmd/main -- --help
+```
+
+> **为什么用 shell 传参而不是直接读文件？** MoonBit 核心库 `moonbitlang/core` 不含文件 IO，
+> 本项目刻意保持**零外部依赖**，因此 CLI 通过 `@env.args()` 接收点表内容（一行一个参数，
+> 或把整个文件作为一个带换行的参数传入）。若需要直接读文件路径，可执行 `moon add moonbitlang/x/fs`
+> 后改用 `@fs.read_to_string`。
+
+在代码中作为库使用：
+
+```moonbit
+let dev = @modbus_lint.parse_device(text)?
+let issues = @modbus_lint.lint(dev)
+println(@modbus_lint.render(issues))       // 人读
+println(@modbus_lint.render_json(issues))  // 机器读
 ```
 
 ## 五、架构与模块边界
