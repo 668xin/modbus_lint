@@ -1,0 +1,7 @@
+// import {
+//   "dengxinxin/modbus_lint" @lib,
+// }
+
+options(
+  "is-main": true,
+)
