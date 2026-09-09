@@ -158,7 +158,7 @@ fn parse_access(s : String) -> Result[Access, String] {
   }
 }
 
-/// True when `s` is a plain identifier usable as a JSONB field name.
+/// True when `s` is a usable JSONB field path such as `jsonb->coil_temp`.
 fn is_ident(s : String) -> Bool {
   if s.length() == 0 {
     return false
@@ -172,6 +172,7 @@ fn is_ident(s : String) -> Bool {
       || c == '_'
       || c == '-'
       || c == '.'
+      || c == '>'
     if !ok {
       return false
     }
