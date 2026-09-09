@@ -9,14 +9,13 @@
 //   "moonbitlang/x@0.4.6",
 // }
 
-name = "dengxinxin/modbus_lint"
+name = "aoliaoxiaoxin/modbus_lint"
 
 version = "0.1.0"
 
 readme = "README.mbt.md"
 
-// TODO: 报名/发布前替换为你的公开仓库地址（赛事要求仓库公开可访问）
-repository = ""
+repository = "https://gitee.com/aoliaoxiaoxin/modbus_lint"
 
 license = "Apache-2.0"
 
