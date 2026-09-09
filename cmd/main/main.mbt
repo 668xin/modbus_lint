@@ -1,22 +1,57 @@
 // CLI entry point for modbus_lint.
 //
 // Usage:
-//   moon run cmd/main                      run the built-in demo point table
-//   moon run cmd/main -- "a 40001 int16 R" lint register lines given as args
+//   moon run cmd/main                        run the built-in demo point table
+//   moon run cmd/main -- --demo              same as above
+//   moon run cmd/main -- --json --demo       demo report in JSON
+//   moon run cmd/main -- "a 40001 int16 R"   lint register lines given as args
 //   moon run cmd/main -- "$(cat table.txt)"  lint a whole file (shell quoted)
+//   moon run cmd/main -- --help              show usage
 //
-// The CLI deliberately depends only on moonbitlang/core (`env` + `println`),
-// so it runs anywhere MoonBit runs without extra dependencies.
+// The CLI depends only on moonbitlang/core (`env` + `println`), so it runs
+// anywhere MoonBit runs, without extra dependencies.
 
 fn main {
   let args = @env.args()
-  if args.length() == 0 {
-    println("no input given; running the built-in demo point table:")
-    println("")
-    run_text(example_text())
+  var json_mode = false
+  var use_demo = false
+  var lines : Array[String] = []
+  for i = 0; i < args.length(); i = i + 1 {
+    let a = args[i]
+    if a == "--json" {
+      json_mode = true
+    } else if a == "--demo" {
+      use_demo = true
+    } else if a == "--help" {
+      print_usage()
+      return
+    } else {
+      lines.push(a)
+    }
+  }
+  if use_demo {
+    run_text(example_text(), json_mode)
     return
   }
-  run_text(join_lines(args))
+  if lines.length() == 0 {
+    println("no input given; running the built-in demo point table:")
+    println("")
+    run_text(example_text(), json_mode)
+    return
+  }
+  run_text(join_lines(lines), json_mode)
+}
+
+/// Print the CLI help text.
+fn print_usage() -> Unit {
+  println("modbus_lint - Modbus point table linter")
+  println("")
+  println("usage: moon run cmd/main -- [options] [register lines...]")
+  println("")
+  println("options:")
+  println("  --json   输出 JSON 格式报告")
+  println("  --demo   校验内置演示点表")
+  println("  --help   显示本帮助")
 }
 
 /// Join argument lines back into a point-table document.
@@ -32,7 +67,7 @@ fn join_lines(lines : Array[String]) -> String {
 }
 
 /// Parse, lint and print a point-table document.
-fn run_text(text : String) -> Unit {
+fn run_text(text : String, json_mode : Bool) -> Unit {
   match parse_device(text) {
     Err(e) => {
       println("parse error: " + e)
@@ -40,7 +75,11 @@ fn run_text(text : String) -> Unit {
     }
     Ok(dev) => {
       let issues = lint(dev)
-      println(render(issues))
+      if json_mode {
+        println(render_json(issues))
+      } else {
+        println(render(issues))
+      }
     }
   }
 }
