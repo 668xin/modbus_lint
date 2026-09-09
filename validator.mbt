@@ -303,3 +303,70 @@ test "lint flags a float64 that overflows the area" {
   }
   assert_eq(lint({ registers: [r] }).length() > 0, true)
 }
+
+test "lint warns about a large address gap" {
+  // 40001 之后直接跳到 40050，中间 48 字没有任何点，应提示漏配
+  let r1 = {
+    name: "a",
+    address: 40001,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "jsonb->a",
+    line: 1,
+  }
+  let r2 = {
+    name: "b",
+    address: 40050,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "jsonb->b",
+    line: 2,
+  }
+  assert_eq(lint({ registers: [r1, r2] }).length() > 0, true)
+}
+
+test "lint does not warn about a small address gap" {
+  let r1 = {
+    name: "a",
+    address: 40001,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "jsonb->a",
+    line: 1,
+  }
+  let r2 = {
+    name: "b",
+    address: 40005,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "jsonb->b",
+    line: 2,
+  }
+  assert_eq(lint({ registers: [r1, r2] }).length(), 0)
+}
+
+test "lint warns when two registers share one jsonb field" {
+  let r1 = {
+    name: "a",
+    address: 40001,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "jsonb->same",
+    line: 1,
+  }
+  let r2 = {
+    name: "b",
+    address: 40002,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "jsonb->same",
+    line: 2,
+  }
+  assert_eq(lint({ registers: [r1, r2] }).length() > 0, true)
+}
