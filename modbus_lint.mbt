@@ -104,6 +104,30 @@ fn area_base(area : Int) -> Int {
 }
 
 ///|
+/// Human-readable name of an area id (see `area_of`).
+pub fn area_name(area : Int) -> String {
+  match area {
+    0 => "coils"
+    1 => "discrete inputs"
+    3 => "input registers"
+    4 => "holding registers"
+    _ => "outside any standard area"
+  }
+}
+
+///|
+/// True when the area holds inputs only (discrete inputs / input registers).
+pub fn area_is_input(area : Int) -> Bool {
+  area == 1 || area == 3
+}
+
+///|
+/// True when the area is bit-addressable (coils / discrete inputs).
+pub fn area_is_bit(area : Int) -> Bool {
+  area == 0 || area == 1
+}
+
+///|
 /// Parse a non-negative / signed decimal integer without relying on stdlib
 /// number parsing, so the behaviour is predictable across targets.
 fn parse_int(s : String) -> Result[Int, String] {
@@ -196,6 +220,39 @@ fn is_ident(s : String) -> Bool {
 /// Convenience constructor for an Issue.
 fn mk_issue(sev : Severity, line : Int, message : String) -> Issue {
   { severity: sev, line, message, }
+}
+
+///|
+/// Human-readable keyword for a register type, symmetric with `parse_type`.
+pub fn type_name(rtype : RegisterType) -> String {
+  match rtype {
+    TBit => "bool"
+    TInt16 => "int16"
+    TUInt16 => "uint16"
+    TInt32 => "int32"
+    TUInt32 => "uint32"
+    TFloat32 => "float32"
+    TFloat64 => "float64"
+  }
+}
+
+///|
+/// Keyword for an access mode, symmetric with `parse_access`.
+pub fn access_name(access : Access) -> String {
+  match access {
+    Read => "R"
+    Write => "W"
+    ReadWrite => "RW"
+  }
+}
+
+///|
+/// Lower-case name of a severity, used in JSON reports.
+pub fn severity_name(sev : Severity) -> String {
+  match sev {
+    Error => "error"
+    Warning => "warning"
+  }
 }
 
 ///|

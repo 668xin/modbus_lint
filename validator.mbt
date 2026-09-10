@@ -100,18 +100,21 @@ pub fn lint(dev : Device) -> Array[Issue] {
     }
   }
 
-  // Rule 5: jsonb field sanity.
+  // Rule 5: jsonb field sanity (parsed path: non-empty values must start with
+  // "jsonb->" and contain only valid dotted identifier segments).
   for r in regs {
-    if r.jsonb.length() > 0 && !is_ident(r.jsonb) {
-      issues.push(
-        mk_issue(
-          Warning,
-          r.line,
-          "jsonb field '" +
-          r.jsonb +
-          "' is not a plain identifier (expected e.g. jsonb->coil_temp)",
-        ),
-      )
+    if !jsonb_is_unset(r.jsonb) {
+      match parse_jsonb_path(r.jsonb) {
+        Err(e) =>
+          issues.push(
+            mk_issue(
+              Warning,
+              r.line,
+              "register '" + r.name + "' has an invalid jsonb field: " + e,
+            ),
+          )
+        Ok(_) => ()
+      }
     }
   }
 
@@ -184,6 +187,89 @@ pub fn lint(dev : Device) -> Array[Issue] {
     }
   }
 
+  // Rule 8: register name sanity (empty name is an error; odd characters warn).
+  for r in regs {
+    if r.name.length() == 0 {
+      issues.push(mk_issue(Error, r.line, "register with an empty name"))
+    } else if !valid_name(r.name) {
+      issues.push(
+        mk_issue(
+          Warning,
+          r.line,
+          "register name '" +
+          r.name +
+          "' contains characters outside [A-Za-z0-9_.-]",
+        ),
+      )
+    }
+  }
+
+  // Rule 9: a multi-word type used at a bit-addressed location (coils / DI).
+  for r in regs {
+    let ar = area_of(r.address)
+    if area_is_bit(ar) && word_count(r.rtype) > 1 {
+      issues.push(
+        mk_issue(
+          Warning,
+          r.line,
+          "register '" +
+          r.name +
+          "' uses multi-word type " +
+          type_name(r.rtype) +
+          " in a bit-addressed area (" +
+          area_name(ar) +
+          ")",
+        ),
+      )
+    }
+  }
+
+  // Rule 10: write access on an input-only area (DI / IR).
+  for r in regs {
+    let ar = area_of(r.address)
+    let writable = match r.access {
+      Write => true
+      ReadWrite => true
+      _ => false
+    }
+    if area_is_input(ar) && writable {
+      issues.push(
+        mk_issue(
+          Warning,
+          r.line,
+          "register '" +
+          r.name +
+          "' is declared " +
+          access_name(r.access) +
+          " but lives in an input area (" +
+          area_name(ar) +
+          ")",
+        ),
+      )
+    }
+  }
+
+  // Rule 11: names that differ only by letter case are easy to mis-use.
+  for i = 0; i < regs.length(); i = i + 1 {
+    for j = i + 1; j < regs.length(); j = j + 1 {
+      let ni = lowercase(regs[i].name)
+      let nj = lowercase(regs[j].name)
+      if ni != "" && ni == nj && regs[i].name != regs[j].name {
+        issues.push(
+          mk_issue(
+            Warning,
+            regs[j].line,
+            "register name '" +
+            regs[j].name +
+            "' differs from '" +
+            regs[i].name +
+            "' only by case",
+          ),
+        )
+      }
+    }
+  }
+
   issues
 }
 
@@ -191,6 +277,43 @@ pub fn lint(dev : Device) -> Array[Issue] {
 /// 允许的最大地址间隙（字）；超过则提示可能漏配。
 fn max_gap() -> Int {
   16
+}
+
+///|
+/// True when every character of `s` is one of A-Za-z0-9_.- (used for names).
+fn valid_name(s : String) -> Bool {
+  if s.length() == 0 {
+    return false
+  }
+  for i = 0; i < s.length(); i = i + 1 {
+    let c = s[i].to_int().unsafe_to_char()
+    let ok = (c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9') ||
+      c == '_' ||
+      c == '.' ||
+      c == '-'
+    if !ok {
+      return false
+    }
+  }
+  true
+}
+
+///|
+/// ASCII lower-casing helper (used by the case-duplicate rule).
+fn lowercase(s : String) -> String {
+  let out = StringBuilder()
+  for i = 0; i < s.length(); i = i + 1 {
+    let c = s[i].to_int().unsafe_to_char()
+    if c >= 'A' && c <= 'Z' {
+      let low = c.to_int() + 32
+      out.write_char(low.unsafe_to_char())
+    } else {
+      out.write_char(c)
+    }
+  }
+  out.to_string()
 }
 
 ///|
@@ -381,4 +504,120 @@ test "lint warns when two registers share one jsonb field" {
     line: 2,
   }
   assert_eq(lint({ registers: [r1, r2], }).length() > 0, true)
+}
+
+///|
+test "lint flags an empty register name and warns on odd name characters" {
+  let r1 = {
+    name: "",
+    address: 40001,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "",
+    line: 1,
+  }
+  let r2 = {
+    name: "bad name!",
+    address: 40002,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "",
+    line: 2,
+  }
+  assert_eq(lint({ registers: [r1, r2], }).length(), 2)
+}
+
+///|
+test "lint accepts a well-formed name" {
+  let r = {
+    name: "Temp_1.ok",
+    address: 40001,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "",
+    line: 1,
+  }
+  assert_eq(lint({ registers: [r], }).length(), 0)
+}
+
+///|
+test "lint warns about a multi-word type in a bit-addressed area" {
+  let r = {
+    name: "x",
+    address: 1001, // coils area
+    rtype: TFloat32,
+    access: Read,
+    unit: "",
+    jsonb: "",
+    line: 1,
+  }
+  assert_eq(lint({ registers: [r], }).length() > 0, true)
+}
+
+///|
+test "lint warns about write access on an input area" {
+  let r = {
+    name: "x",
+    address: 10001, // discrete inputs area
+    rtype: TBit,
+    access: ReadWrite,
+    unit: "",
+    jsonb: "",
+    line: 1,
+  }
+  assert_eq(lint({ registers: [r], }).length() > 0, true)
+}
+
+///|
+test "lint flags names that differ only by case" {
+  let r1 = {
+    name: "temp",
+    address: 40001,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "",
+    line: 1,
+  }
+  let r2 = {
+    name: "TEMP",
+    address: 40002,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "",
+    line: 2,
+  }
+  assert_eq(lint({ registers: [r1, r2], }).length() > 0, true)
+}
+
+///|
+test "lint warns on an invalid jsonb path" {
+  let r = {
+    name: "x",
+    address: 40001,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "jsonb->a b",
+    line: 1,
+  }
+  assert_eq(lint({ registers: [r], }).length() > 0, true)
+}
+
+///|
+test "lint accepts an empty jsonb path" {
+  let r = {
+    name: "x",
+    address: 40001,
+    rtype: TInt16,
+    access: Read,
+    unit: "",
+    jsonb: "",
+    line: 1,
+  }
+  assert_eq(lint({ registers: [r], }).length(), 0)
 }
