@@ -73,9 +73,17 @@
 
 ## 阶段 7 · 收尾验证与提交
 
-- [ ] `moon check --deny-warn` / `moon test --deny-warn` / `moon fmt && git diff --exit-code` / `moon info`。
-- [ ] 统计 `.mbt` 有效行数，评估是否接近 4k；不足则补充测试与边界用例。
-- [ ] 一次性 commit，双端推送（github + gitlink）。
+- [x] `moon check --deny-warn` / `moon test --deny-warn` / `moon fmt && git diff --exit-code` / `moon info`。
+- [x] 统计 `.mbt` 有效行数，评估接近 4k；此前已推送第 1 批。
+- [x] 一次性 commit，双端推送（github + gitlink）。
+
+## 阶段 8 · 二阶扩充（体量与功能双增）
+
+- [x] **encoding.mbt**：值编码/字节序模块——`ByteOrder`/`WordOrder` 枚举、coil/int16/uint16/int32 与二字节（大/小端）互转、32 位按字序分解折叠，全量 round-trip 测试。
+- [x] **stats.mbt**：统计与分析模块——`DeviceStats`/`AreaStats` 快照、字占用/空闲/利用率、位寄存器、jsonb 映射数、名称长度、主导区域、间隙范围。
+- [x] **reporter.mbt 扩充**：新增 `render_csv`（转义引号换行）与 `render_html`（表格）/ 空为空报告。
+- [x] **validator.mbt 扩充**：新增 R12（jsonb 路径过深）、R13（保留字名称）、R14（32 位类型奇偏置），规则达 14 条，各配正反测试。
+- [x] **CLI 扩充**：`--format csv|html`、`--stats` 输出统计摘要，`--help` 同步更新。
 
 ---
 
@@ -83,4 +91,4 @@
 
 - 新增代码**真实可用、有用**，绝非凑行数。
 - `moon check` 与 `moon test` 通过；尽量保持 `--deny-warn` 零警告。
-- 行数按阶段累计，最终逼近章程规模参考。
+- 行数按阶段累计，最终逼近章程规模参考（当前 `.mbt` 约 3.6k 行）。

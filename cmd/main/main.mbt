@@ -27,6 +27,8 @@ enum OutputFormat {
   Json
   Markdown
   Summary
+  Csv
+  Html
 }
 
 ///|
@@ -37,6 +39,7 @@ fn main {
   let mut json_in = ""
   let mut show = false
   let mut use_demo = false
+  let mut want_stats = false
   let lines : Array[String] = []
   // args[0] is the executable path itself, so user arguments start at index 1.
   let mut i = 1
@@ -72,6 +75,8 @@ fn main {
       show = true
     } else if a == "--demo" {
       use_demo = true
+    } else if a == "--stats" {
+      want_stats = true
     } else if a == "--help" {
       print_usage()
       return
@@ -82,20 +87,44 @@ fn main {
   }
 
   if use_demo {
-    run_device(@modbus_lint.parse_device(example_text()), fmt, gap_opt, show)
+    run_device(
+      @modbus_lint.parse_device(example_text()),
+      fmt,
+      gap_opt,
+      show,
+      want_stats,
+    )
     return
   }
   if json_in != "" {
-    run_device(@modbus_lint.parse_device_json(json_in), fmt, gap_opt, show)
+    run_device(
+      @modbus_lint.parse_device_json(json_in),
+      fmt,
+      gap_opt,
+      show,
+      want_stats,
+    )
     return
   }
   if lines.length() == 0 {
     println("no input given; running the built-in demo point table:")
     println("")
-    run_device(@modbus_lint.parse_device(example_text()), fmt, gap_opt, show)
+    run_device(
+      @modbus_lint.parse_device(example_text()),
+      fmt,
+      gap_opt,
+      show,
+      want_stats,
+    )
     return
   }
-  run_device(@modbus_lint.parse_device(join_lines(lines)), fmt, gap_opt, show)
+  run_device(
+    @modbus_lint.parse_device(join_lines(lines)),
+    fmt,
+    gap_opt,
+    show,
+    want_stats,
+  )
 }
 
 ///|
@@ -107,7 +136,7 @@ fn print_usage() -> Unit {
   println("")
   println("options:")
   println(
-    "  --format FMT   报告格式: text | json | markdown | summary（默认 text）",
+    "  --format FMT   报告格式: text | json | markdown | summary | csv | html（默认 text）",
   )
   println("  --json         --format json 的别名")
   println(
@@ -115,6 +144,7 @@ fn print_usage() -> Unit {
   )
   println("  --json-in J    从 JSON 文档读取点表（而非文本行）")
   println("  --show         在报告前打印按地址排序后的点表")
+  println("  --stats        打印点表统计摘要并退出")
   println("  --demo         校验内置演示点表")
   println("  --help         显示本帮助")
 }
@@ -128,6 +158,10 @@ fn parse_format(s : String) -> OutputFormat {
     Markdown
   } else if s == "summary" {
     Summary
+  } else if s == "csv" {
+    Csv
+  } else if s == "html" {
+    Html
   } else {
     Text
   }
@@ -172,6 +206,7 @@ fn run_device(
   fmt : OutputFormat,
   gap_opt : Int?,
   show : Bool,
+  want_stats : Bool,
 ) -> Unit {
   let dev = match parsed {
     Err(e) => {
@@ -179,6 +214,11 @@ fn run_device(
       return
     }
     Ok(d) => d
+  }
+  if want_stats {
+    println("=== point-table statistics ===")
+    println(@modbus_lint.stats_text(dev))
+    return
   }
   if show {
     print_table(@modbus_lint.sort_by_address(dev))
@@ -192,6 +232,8 @@ fn run_device(
     Json => @modbus_lint.render_json(issues)
     Markdown => @modbus_lint.render_markdown(issues)
     Summary => @modbus_lint.render_summary(dev, issues)
+    Csv => @modbus_lint.render_csv(issues)
+    Html => @modbus_lint.render_html(issues)
   }
   println(out)
 }

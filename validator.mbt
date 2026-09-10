@@ -277,6 +277,65 @@ pub fn lint_with_gap(dev : Device, threshold : Int) -> Array[Issue] {
     }
   }
 
+  // Rule 12: jsonb path deeper than the supported nesting is poor practice.
+  for r in regs {
+    if jsonb_depth(r.jsonb) >= 8 {
+      issues.push(
+        mk_issue(
+          Warning,
+          r.line,
+          "register '" +
+          r.name +
+          "' has a jsonb path nested " +
+          jsonb_depth(r.jsonb).to_string() +
+          " levels deep; consider flattening (limit 8)",
+        ),
+      )
+    }
+  }
+
+  // Rule 13: registering under a reserved protocol/special key is error-prone.
+  for r in regs {
+    if reserved_name(lowercase(r.name)) {
+      issues.push(
+        mk_issue(
+          Warning,
+          r.line,
+          "register name '" +
+          r.name +
+          "' collides with a reserved key; rename it",
+        ),
+      )
+    }
+  }
+
+  // Rule 14: 32-bit types should start on an even word offset inside the area
+  // so that 2-word blocks do not cross natural 32-bit boundaries on many PLCs.
+  for r in regs {
+    let ar = area_of(r.address)
+    if ar < 0 {
+      continue
+    }
+    let off = r.address - area_base(ar)
+    if word_count(r.rtype) == 2 && off % 2 != 0 {
+      issues.push(
+        mk_issue(
+          Warning,
+          r.line,
+          "register '" +
+          r.name +
+          "' (" +
+          type_name(r.rtype) +
+          ", 2 words) starts at an odd word offset " +
+          off.to_string() +
+          " in the " +
+          area_name(ar) +
+          " area",
+        ),
+      )
+    }
+  }
+
   issues
 }
 
@@ -321,6 +380,17 @@ fn lowercase(s : String) -> String {
     }
   }
   out.to_string()
+}
+
+///|
+/// True when `name` (already lower-cased) equals a reserved protocol key that
+/// upper layers reserve for their own use, so point tables should not use it.
+fn reserved_name(name_lower : String) -> Bool {
+  name_lower == "modbus" ||
+  name_lower == "status" ||
+  name_lower == "error" ||
+  name_lower == "alarm" ||
+  name_lower == "fault"
 }
 
 ///|
@@ -787,6 +857,114 @@ test "a clean device produces no issues" {
         unit: "",
         jsonb: "jsonb->w",
         line: 2,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length(), 0)
+}
+
+///|
+test "lint flags an over-deep jsonb path" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "deep",
+        address: 40001,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "jsonb->a.b.c.d.e.f.g.h.i",
+        line: 1,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length() > 0, true)
+}
+
+///|
+test "lint accepts a moderately nested jsonb path" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "ok",
+        address: 40001,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "jsonb->a.b.c",
+        line: 1,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length(), 0)
+}
+
+///|
+test "lint flags a reserved register name" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "STATUS",
+        address: 40001,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "",
+        line: 1,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length() > 0, true)
+}
+
+///|
+test "lint lets an ordinary name pass" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "pump_rpm",
+        address: 40001,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "",
+        line: 1,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length(), 0)
+}
+
+///|
+test "lint warns when a 32-bit type starts at an odd word offset" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "odd32",
+        address: 40002,
+        rtype: TInt32,
+        access: Read,
+        unit: "",
+        jsonb: "",
+        line: 1,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length() > 0, true)
+}
+
+///|
+test "lint accepts a 32-bit type on an even word offset" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "even32",
+        address: 40001,
+        rtype: TInt32,
+        access: Read,
+        unit: "",
+        jsonb: "",
+        line: 1,
       },
     ],
   }

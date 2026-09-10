@@ -318,3 +318,105 @@ test "render_summary on an empty device" {
   assert_eq(s.contains("areas: -"), true)
   assert_eq(s.contains("jsonb-mapped: 0"), true)
 }
+
+///|
+/// 转义 CSV 字段：把 `"` 写成 `""`、把换行写成空格，保证单行可解析。
+fn escape_csv(s : String) -> String {
+  let out = StringBuilder()
+  for i = 0; i < s.length(); i = i + 1 {
+    let c = s[i].to_int().unsafe_to_char()
+    if c == '"' {
+      out.write_string("\"\"")
+    } else if c == '\n' {
+      out.write_string(" ")
+    } else {
+      out.write_char(c)
+    }
+  }
+  out.to_string()
+}
+
+///|
+/// 以 CSV 形式输出（含表头），适合导入 Excel / 电子表格继续分析。
+pub fn render_csv(issues : Array[Issue]) -> String {
+  let out = StringBuilder()
+  out.write_string("severity,line,message\n")
+  for it in issues {
+    out.write_string(
+      "\"" +
+      severity_name(it.severity) +
+      "\"," +
+      it.line.to_string() +
+      ",\"" +
+      escape_csv(it.message) +
+      "\"\n",
+    )
+  }
+  out.to_string()
+}
+
+///|
+/// 以 HTML 表格形式输出，便于在浏览器中直接查看或嵌入到报告页。
+pub fn render_html(issues : Array[Issue]) -> String {
+  let out = StringBuilder()
+  out.write_string("<!doctype html>\n<html>\n<head>\n")
+  out.write_string("<meta charset=\"utf-8\">\n")
+  out.write_string("<title>modbus_lint report</title>\n")
+  out.write_string("</head>\n<body>\n")
+  out.write_string("<h1>modbus_lint findings</h1>\n")
+  if issues.length() == 0 {
+    out.write_string("<p><strong>OK:</strong> no issues found.</p>\n")
+  } else {
+    out.write_string("<table border=\"1\">\n")
+    out.write_string(
+      "<tr><th>severity</th><th>line</th><th>message</th></tr>\n",
+    )
+    for it in issues {
+      let cls = if it.severity is Error { "error" } else { "warning" }
+      out.write_string(
+        "<tr class=\"" +
+        cls +
+        "\"><td>" +
+        severity_name(it.severity) +
+        "</td><td>" +
+        it.line.to_string() +
+        "</td><td>" +
+        it.message +
+        "</td></tr>\n",
+      )
+    }
+    out.write_string("</table>\n")
+  }
+  out.write_string("</body>\n</html>\n")
+  out.to_string()
+}
+
+///|
+test "render_csv emits a header and one row per finding" {
+  let issues = [mk_issue(Error, 1, "dup"), mk_issue(Warning, 2, "gap")]
+  let s = render_csv(issues)
+  assert_eq(s.has_prefix("severity,line,message\n"), true)
+  assert_eq(s.contains("\"error\",1,\"dup\""), true)
+  assert_eq(s.contains("\"warning\",2,\"gap\""), true)
+}
+
+///|
+test "render_csv escapes embedded quotes and newlines" {
+  let m = "say \"x\"\nnext"
+  let s = render_csv([mk_issue(Error, 3, m)])
+  assert_eq(s.contains("say \"\"x\"\" next"), true)
+}
+
+///|
+test "render_html wraps findings in a table" {
+  let s = render_html([mk_issue(Error, 5, "dup name")])
+  assert_eq(s.contains("<!doctype html>"), true)
+  assert_eq(s.contains("<th>severity</th>"), true)
+  assert_eq(s.contains("dup name"), true)
+}
+
+///|
+test "render_html on clean findings reports OK" {
+  let s = render_html([])
+  assert_eq(s.contains("OK:"), true)
+}
