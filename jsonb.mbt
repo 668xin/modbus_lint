@@ -157,3 +157,26 @@ test "jsonb_depth and jsonb_leaf" {
   assert_eq(jsonb_leaf("jsonb->x"), "x")
   assert_eq(jsonb_leaf(""), "")
 }
+
+///|
+test "parse_jsonb_path accepts segments with numbers and underscores" {
+  assert_eq(parse_jsonb_path("jsonb->line2.temp_r") is Ok(_), true)
+  match parse_jsonb_path("jsonb->area.b") {
+    Ok(segs) => assert_eq(segs.length(), 2)
+    Err(_) => assert_true(false)
+  }
+}
+
+///|
+test "is_jsonb_prefixed matches only the jsonb-> prefix" {
+  assert_eq(is_jsonb_prefixed("jsonb->a"), true)
+  assert_eq(is_jsonb_prefixed("jsonb->"), true)
+  assert_eq(is_jsonb_prefixed("a"), false)
+  assert_eq(is_jsonb_prefixed(""), false)
+}
+
+///|
+test "jsonb_depth agrees with long dotted paths" {
+  assert_eq(jsonb_depth("jsonb->a.b.c.d"), 4)
+  assert_eq(jsonb_leaf("jsonb->a.b"), "b")
+}

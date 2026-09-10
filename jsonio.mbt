@@ -235,3 +235,35 @@ test "render_issues_json is valid json with severity keywords" {
   assert_eq(s.contains("error"), true)
   assert_eq(s.contains("warning"), true)
 }
+
+///|
+test "parse_device_json accepts an empty register list" {
+  assert_eq(parse_device_json("{\"registers\": []}") is Ok(_), true)
+}
+
+///|
+test "parse_device_json rejects an unknown access keyword" {
+  let bad = "{\"registers\": [{\"name\":\"x\",\"address\":40001,\"rtype\":\"int16\",\"access\":\"RR\",\"unit\":\"\",\"jsonb\":\"\",\"line\":1}]}"
+  assert_eq(parse_device_json(bad) is Ok(_), false)
+}
+
+///|
+test "parse_device_json rejects a missing required field" {
+  let bad = "{\"registers\": [{\"address\":40001,\"rtype\":\"int16\"}]}"
+  assert_eq(parse_device_json(bad) is Ok(_), false)
+}
+
+///|
+test "parse_device_json tolerates unknown extra fields" {
+  let json = "{\"registers\":[{\"name\":\"x\",\"address\":40001,\"rtype\":\"int16\",\"access\":\"R\",\"unit\":\"\",\"jsonb\":\"\",\"line\":1,\"extra\":99}]}"
+  let res = parse_device_json(json)
+  assert_eq(res is Ok(_), true)
+  assert_eq(res.unwrap().registers.length(), 1)
+}
+
+///|
+test "device json round trip preserves an empty device" {
+  let dev : Device = { registers: [], }
+  let back = json_roundtrip(dev).unwrap()
+  assert_eq(back.registers.length(), 0)
+}

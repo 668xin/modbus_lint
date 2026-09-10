@@ -657,3 +657,138 @@ test "lint_with_gap uses the caller-supplied gap threshold" {
   // With a higher threshold the same two registers are fine.
   assert_eq(lint_with_gap(dev, 32).length(), 0)
 }
+
+///|
+test "lint flags address 0 and negative addresses" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "z",
+        address: 0,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "",
+        line: 1,
+      },
+      {
+        name: "n",
+        address: -5,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "",
+        line: 2,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length() > 0, true)
+}
+
+///|
+test "lint flags a multi-word register spilling past the end of its area" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "x",
+        address: 49999,
+        rtype: TFloat32,
+        access: Read,
+        unit: "",
+        jsonb: "",
+        line: 1,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length() > 0, true)
+}
+
+///|
+test "lint reports two registers mapping to the same jsonb field" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "a",
+        address: 40001,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "jsonb->same",
+        line: 1,
+      },
+      {
+        name: "b",
+        address: 40002,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "jsonb->same",
+        line: 2,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length() > 0, true)
+}
+
+///|
+test "lint flags write access on an input-only area" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "di",
+        address: 10001,
+        rtype: TBit,
+        access: Write,
+        unit: "",
+        jsonb: "",
+        line: 1,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length() > 0, true)
+}
+
+///|
+test "lint warns when a bit area holds a multi-word type" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "c1",
+        address: 1,
+        rtype: TFloat32,
+        access: Read,
+        unit: "",
+        jsonb: "",
+        line: 1,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length() > 0, true)
+}
+
+///|
+test "a clean device produces no issues" {
+  let dev : Device = {
+    registers: [
+      {
+        name: "v",
+        address: 40001,
+        rtype: TInt16,
+        access: Read,
+        unit: "V",
+        jsonb: "jsonb->v",
+        line: 1,
+      },
+      {
+        name: "w",
+        address: 40002,
+        rtype: TInt16,
+        access: Read,
+        unit: "",
+        jsonb: "jsonb->w",
+        line: 2,
+      },
+    ],
+  }
+  assert_eq(lint(dev).length(), 0)
+}

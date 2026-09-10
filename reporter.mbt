@@ -301,3 +301,20 @@ test "render_summary counts errors, warnings and areas" {
   assert_eq(s.contains("warnings: 1"), true)
   assert_eq(s.contains("jsonb-mapped: 1"), true)
 }
+
+///|
+test "render_json escapes double quotes and backslashes" {
+  let m = "say \"hi\" and \\ done"
+  let s = render_json([mk_issue(Error, 1, m)])
+  assert_eq(s.contains("say \\\"hi\\\""), true)
+  assert_eq(s.contains("and \\\\ done"), true)
+}
+
+///|
+test "render_summary on an empty device" {
+  let dev : Device = { registers: [], }
+  let s = render_summary(dev, [])
+  assert_eq(s.contains("registers: 0"), true)
+  assert_eq(s.contains("areas: -"), true)
+  assert_eq(s.contains("jsonb-mapped: 0"), true)
+}
