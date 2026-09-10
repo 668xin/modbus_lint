@@ -9,8 +9,15 @@
 //   5. A non-empty jsonb field should be a plain identifier (warning).
 
 ///|
-/// Run every rule and return all findings.
+/// Run every rule and return all findings (with the default gap threshold).
 pub fn lint(dev : Device) -> Array[Issue] {
+  lint_with_gap(dev, max_gap())
+}
+
+///|
+/// Run every rule and return all findings, using `threshold` as the max allowed
+/// address gap (in words) for Rule 6. `lint(dev)` is `lint_with_gap(dev, 16)`.
+pub fn lint_with_gap(dev : Device, threshold : Int) -> Array[Issue] {
   let issues : Array[Issue] = []
   let regs = dev.registers
 
@@ -144,8 +151,8 @@ pub fn lint(dev : Device) -> Array[Issue] {
       }
     }
     if next_lo > 0 {
-      let gap = next_lo - hi - 1
-      if gap > max_gap() {
+      let g = next_lo - hi - 1
+      if g > threshold {
         issues.push(
           mk_issue(
             Warning,
@@ -153,9 +160,9 @@ pub fn lint(dev : Device) -> Array[Issue] {
             "register '" +
             a.name +
             "' 与下一个寄存器之间有 " +
-            gap.to_string() +
+            g.to_string() +
             " 字地址间隙（阈值 " +
-            max_gap().to_string() +
+            threshold.to_string() +
             "），可能存在漏配或地址笔误",
           ),
         )
@@ -620,4 +627,33 @@ test "lint accepts an empty jsonb path" {
     line: 1,
   }
   assert_eq(lint({ registers: [r], }).length(), 0)
+}
+
+///|
+test "lint_with_gap uses the caller-supplied gap threshold" {
+  let regs = [
+    {
+      name: "a",
+      address: 40001,
+      rtype: TInt16,
+      access: Read,
+      unit: "",
+      jsonb: "",
+      line: 1,
+    },
+    {
+      name: "b",
+      address: 40020,
+      rtype: TInt16,
+      access: Read,
+      unit: "",
+      jsonb: "",
+      line: 2,
+    },
+  ]
+  let dev : Device = { registers: regs, }
+  // 17-word gap exceeds the default 16 so it should flag the large-gap warning.
+  assert_eq(lint(dev).length() > 0, true)
+  // With a higher threshold the same two registers are fine.
+  assert_eq(lint_with_gap(dev, 32).length(), 0)
 }

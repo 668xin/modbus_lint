@@ -116,6 +116,29 @@ pub fn area_name(area : Int) -> String {
 }
 
 ///|
+/// Right-pad a string to at least `14` columns so columns line up when the CLI
+/// prints a sorted point table.
+pub fn pad(s : String) -> String {
+  let mut out = s
+  while out.length() < 14 {
+    out = out + " "
+  }
+  out
+}
+
+///|
+/// Left-pad an integer to at least `7` columns (right-aligned) for the CLI
+/// point-table view.
+pub fn pad_num(n : Int) -> String {
+  let s = n.to_string()
+  let mut out = ""
+  while out.length() + s.length() < 7 {
+    out = out + " "
+  }
+  out + s
+}
+
+///|
 /// True when the area holds inputs only (discrete inputs / input registers).
 pub fn area_is_input(area : Int) -> Bool {
   area == 1 || area == 3

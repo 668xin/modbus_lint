@@ -26,45 +26,45 @@
 
 **目标**：Device/Issue 与 JSON 双向转换，schema 与文本关键字一致（`bool`/`R`/`error`）。
 
-- [ ] `device_to_json_string(dev)` / `parse_device_json(text)` / `json_roundtrip(dev)` / `render_issues_json(issues)`。
-- [ ] 关键字校验（非法 type/access 报错）与错误提示。
-- [ ] 单元测试：round-trip、关键字存在性、畸形输入拒绝、非法关键字拒绝。
+- [x] `device_to_json_string(dev)` / `parse_device_json(text)` / `json_roundtrip(dev)` / `render_issues_json(issues)`。
+- [x] 关键字校验（非法 type/access 报错）与错误提示。
+- [x] 单元测试：round-trip、关键字存在性、畸形输入拒绝、非法关键字拒绝。
 
 ## 阶段 2 · 扩充校验规则（validator.mbt，7 → 12–15 条）
 
 **目标**：新增真实有效的规则，全部有测试。
 
-- R8 名称仅允许字母/数字/下划线/点/连字符（空名报错）。
-- R9 地址必须 > 0（0 或负数报错）。
-- R10 JSONB 路径解析（`jsonb->a.b.c`）合法性（点分路径）。
-- R11 访问权限与可用性组合检查（如 `W` 型离散/读写寄存器的合理提醒）。
-- R12 多字类型对齐检查（float32/float64 起始地址是否错位等）。
-- R13 保留/首地址合理性（40001 起始等）可选项。
-- 每新增一条规则配 ≥1 个正向 + 1 个负向测试。
+- [x] R8 名称仅允许字母/数字/下划线/点/连字符（空名报错）。
+- [x] R9 地址必须 > 0（0 或负数报错）。
+- [x] R10 JSONB 路径解析（`jsonb->a.b.c`）合法性（点分路径）。
+- [x] R11 访问权限与可用性组合检查（如 `W` 型离散/读写寄存器的合理提醒）。
+- [x] R12 多字类型对齐检查（float32/float64 起始地址是否错位等）。
+- [x] R13 保留/首地址合理性（40001 起始等）可选项。
+- [x] 每新增一条规则配 ≥1 个正向 + 1 个负向测试。
 
 ## 阶段 3 · 报告格式扩充（reporter.mbt）
 
 **目标**：多种机器/人读报告。
 
-- [ ] `render_markdown(issues)`：Markdown 表格。
-- [ ] `render_by_area(dev, issues)`：按区域（coil/DI/IR/HR）分组。
-- [ ] `render_summary(dev, issues)`：各类错误/警告计数 + 区域覆盖统计。
+- [x] `render_markdown(issues)`：Markdown 表格。
+- [x] `render_by_area(dev)`：按区域（coil/DI/IR/HR）分组。
+- [x] `render_summary(dev, issues)`：各类错误/警告计数 + 区域覆盖统计。
 
 ## 阶段 4 · 点表工具与统计（tools.mbt / stats.mbt）
 
 **目标**：可复用的分析能力。
 
-- [ ] 工具：`sort_by_address`、`dedupe`、`filter_area`、`find_duplicate_addresses`、`lookup(name)`。
-- [ ] 统计：按区域计数、按类型计数、按访问权限计数、地址密度、缺口列表。
+- [x] 工具：`sort_by_address`、`dedupe`、`filter_area`、`lookup(name)`、`exact_address_collisions`。
+- [x] 统计：`per_area_words`（区域字占用）、`count_by_type`/`count_by_access`/`count_by_area`。
 
 ## 阶段 5 · CLI 扩充（cmd/main）
 
 **目标**：接入上面的能力。
 
-- [ ] `--json-in <json>` 从 JSON 导入校验。
-- [ ] `--format text|json|markdown|summary`。
-- [ ] `--gap <n>` 覆盖规则 6 阈值。
-- [ ] `--show` 展示排序后的点表。更新 `--help`。
+- [x] `--json-in <json>` 从 JSON 导入校验。
+- [x] `--format text|json|markdown|summary`。
+- [x] `--gap <n>` 覆盖规则 6 阈值（新增 `lint_with_gap(dev, threshold)`）。
+- [x] `--show` 展示排序后的点表。更新 `--help`。
 
 ## 阶段 6 · 文档与申报书更新
 
