@@ -1,6 +1,7 @@
 import {
   "aoliaoxiaoxin/modbus_lint",
   "moonbitlang/core/env",
+  "moonbitlang/core/math",
 }
 
 pkgtype(kind: "executable")

@@ -59,6 +59,17 @@ pub fn byte_order_name(order : ByteOrder) -> String {
 }
 
 ///|
+/// Resolve a keyword ("big"/"little", case-insensitive) into a `ByteOrder`,
+/// defaulting to big-endian for anything unrecognised.
+pub fn byte_order_of(name : String) -> ByteOrder {
+  if name == "little" || name == "le" || name == "LittleEndian" {
+    LittleEndian
+  } else {
+    BigEndian
+  }
+}
+
+///|
 /// Human keyword for a word order, for reports and (de)serialization.
 pub fn word_order_name(order : WordOrder) -> String {
   match order {
