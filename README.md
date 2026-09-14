@@ -95,18 +95,18 @@ moon run cmd/main -- --help
 
 表格速览：
 
-| 选项 | 作用 |
-|------|------|
-| `--format FMT` | 报告格式：`text`/`json`/`markdown`/`summary`/`csv`/`html`（默认 text） |
-| `--json` | `--format json` 的别名 |
-| `--json-in J` | 从 JSON 文档读取点表 |
-| `--gap N` | 覆盖 16 字地址间隙阈值（规则 6） |
-| `--show` | 打印按地址排序后的点表 |
-| `--stats` | 输出统计摘要（字占用/利用率/区域覆盖） |
-| `--encode TYPE VAL` | 值编码：`int16`/`uint16`/`int32`/`uint32`/`float32`/`float64` |
-| `--decode TYPE HEX` | 值解码：4 位 hex 字或 2 位 hex 字节 |
-| `--order BO` | 字节视图字节序：`big`/`little` |
-| `--demo` | lint 内置演示点表 |
+| 选项                | 作用                                                                   |
+| ------------------- | ---------------------------------------------------------------------- |
+| `--format FMT`      | 报告格式：`text`/`json`/`markdown`/`summary`/`csv`/`html`（默认 text） |
+| `--json`            | `--format json` 的别名                                                 |
+| `--json-in J`       | 从 JSON 文档读取点表                                                   |
+| `--gap N`           | 覆盖 16 字地址间隙阈值（规则 6）                                       |
+| `--show`            | 打印按地址排序后的点表                                                 |
+| `--stats`           | 输出统计摘要（字占用/利用率/区域覆盖）                                 |
+| `--encode TYPE VAL` | 值编码：`int16`/`uint16`/`int32`/`uint32`/`float32`/`float64`          |
+| `--decode TYPE HEX` | 值解码：4 位 hex 字或 2 位 hex 字节                                    |
+| `--order BO`        | 字节视图字节序：`big`/`little`                                         |
+| `--demo`            | lint 内置演示点表                                                      |
 
 ## 最小可运行示例
 
@@ -154,9 +154,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-      - run: moon check      # 检查
-      - run: moon test       # 测试
-      - run: moon build cmd/main   # 构建
+      - run: moon check # 检查
+      - run: moon test # 测试
+      - run: moon build cmd/main # 构建
 ```
 
 ## 测试与质量保证
@@ -171,7 +171,7 @@ moon check --deny-warn && moon test --deny-warn
 
 ## 发布到 mooncakes.io
 
-本项目已按 MoonBit 模块规范配置模块元数据（`moon.mod`：`name = "aoliaoxiaoxin/modbus_lint"`、`readme = "README.mbt.md"`、`license = "Apache-2.0"`、`keywords`/`description`），并在 `README.mbt.md` 提供面向包使用者的说明。发布流程：
+本项目已按 MoonBit 模块规范配置模块元数据（`moon.mod`：`name = "668xin/modbus_lint"`、`readme = "README.mbt.md"`、`license = "Apache-2.0"`、`keywords`/`description`），并在 `README.mbt.md` 提供面向包使用者的说明。已发布到 mooncakes.io（`668xin/modbus_lint@0.1.0`）。
 
 ```bash
 moon pub          # 或 moon publish，按 MoonBit 工具链发布命令为准

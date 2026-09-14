@@ -1,5 +1,5 @@
 import {
-  "aoliaoxiaoxin/modbus_lint",
+  "668xin/modbus_lint",
   "moonbitlang/core/env",
   "moonbitlang/core/math",
 }

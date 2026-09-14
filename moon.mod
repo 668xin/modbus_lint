@@ -9,13 +9,13 @@
 //   "moonbitlang/x@0.4.6",
 // }
 
-name = "aoliaoxiaoxin/modbus_lint"
+name = "668xin/modbus_lint"
 
 version = "0.1.0"
 
 readme = "README.mbt.md"
 
-repository = "https://gitee.com/aoliaoxiaoxin/modbus_lint"
+repository = "https://github.com/668xin/modbus_lint"
 
 license = "Apache-2.0"
 
