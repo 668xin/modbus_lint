@@ -7,7 +7,8 @@
 //   moon run cmd/main -- --json-in "$(cat table.json)" lint a JSON point table
 //   moon run cmd/main -- --gap 32 --show "a 40001..."  raise gap threshold + show sorted table
 //   moon run cmd/main -- --encode float32 1.5          pack a float into words + bytes
-//   moon run cmd/main -- --decode float64 3ff0 0000..   rebuild a value from hex words
+//   moon run cmd/main -- --encode uint32 4294967295    pack an unsigned 32-bit value
+//   moon run cmd/main -- --decode int32 ffff 8000      rebuild a signed value from words
 //   moon run cmd/main -- --help                        show usage
 //
 // Options:
@@ -16,9 +17,10 @@
 //   --gap N       override the Rule-6 max address gap threshold (words)
 //   --json-in J   read the point table from a JSON document instead of text lines
 //   --show        print the point table sorted by address before the report
-//   --encode T V  encode VALUE V of TYPE T (float32|float64) into words + bytes
-//   --decode T W  decode hex WORD tokens (MSW first) back to a number
+//   --encode T V  encode VALUE V of TYPE T (int16|uint16|int32|uint32|float32|float64)
+//   --decode T W  decode hex tokens: 4-digit words (MSW first) or 2-digit wire bytes
 //   --order BO    byte order for the *bytes* view: big | little (default big)
+//   --word-order WO  word order for int32/uint32: hi-lo | lo-hi (default hi-lo)
 //   --demo        lint the built-in demo point table
 //   --help        show this help
 //
@@ -51,6 +53,7 @@ fn main {
   let mut enc_type = ""
   let mut enc_val = ""
   let mut byte_order = "big"
+  let mut word_order = "hi-lo"
   let lines : Array[String] = []
   // args[0] is the executable path itself, so user arguments start at index 1.
   let mut i = 1
@@ -115,6 +118,14 @@ fn main {
         println("--order requires big or little")
         return
       }
+    } else if a == "--word-order" {
+      if i + 1 < args.length() {
+        word_order = args[i + 1]
+        i = i + 1
+      } else {
+        println("--word-order requires hi-lo or lo-hi")
+        return
+      }
     } else if a == "--help" {
       print_usage()
       return
@@ -126,7 +137,7 @@ fn main {
 
   // A value-encoding request short-circuits the linter entirely.
   if enc_type != "" {
-    run_encode(enc_is_encode, enc_type, enc_val, lines, byte_order)
+    run_encode(enc_is_encode, enc_type, enc_val, lines, byte_order, word_order)
     return
   }
 
@@ -191,13 +202,16 @@ fn print_usage() -> Unit {
   println("  --stats        打印点表统计摘要并退出")
   println("  --demo         校验内置演示点表")
   println(
-    "  --encode T V   将数值 V（类型 T=float32|float64）编码为寄存器字/字节",
+    "  --encode T V   将数值 V（类型 T=int16|uint16|int32|uint32|float32|float64）编码为寄存器字/字节",
   )
   println(
-    "  --decode T W   从十六进制字 W（最高字在前）反解出数值",
+    "  --decode T W   反解数值：4 位十六制字，或 2 位线上字节",
   )
   println(
     "  --order BO     *字节视图*字节序: big | little（默认 big）",
+  )
+  println(
+    "  --word-order WO int32/uint32 字序: hi-lo | lo-hi（默认 hi-lo）",
   )
   println("  --help         显示本帮助")
 }
@@ -339,6 +353,93 @@ fn parse_double(s : String) -> Double? {
 }
 
 ///|
+/// Parse a signed 32-bit integer literal into an `Int`, or `None` if the text
+/// is not an integral value in `(-2^31, 2^31)`.
+fn parse_int32(s : String) -> Int? {
+  match parse_double(s) {
+    None => None
+    Some(d) => {
+      if d < -2147483648.0 || d > 2147483647.0 {
+        return None
+      }
+      if d.to_int().to_double() != d {
+        return None // not an integer
+      }
+      Some(d.to_int())
+    }
+  }
+}
+
+///|
+/// Parse an unsigned 32-bit literal (`0..=4294967295`) into its two's-complement
+/// `Int` form (values above 2^31 become negative), or `None` on bad input.
+fn parse_uint32(s : String) -> Int? {
+  match parse_double(s) {
+    None => None
+    Some(d) => {
+      if d < 0.0 || d >= 4294967296.0 {
+        return None
+      }
+      if d != d.round() {
+        return None // not an integer
+      }
+      if d <= 2147483647.0 {
+        Some(d.to_int())
+      } else {
+        // Above 2^31: shift into the lower half so the result fits `Int` as a
+        // two's-complement negative (e.g. 4294967295 -> -1).
+        Some((d - 4294967296.0).to_int())
+      }
+    }
+  }
+}
+
+///|
+/// Parse a signed 16-bit integer literal (-32768..=32767), or `None`.
+fn parse_int16(s : String) -> Int? {
+  match parse_double(s) {
+    None => None
+    Some(d) => {
+      if d < -32768.0 || d > 32767.0 {
+        return None
+      }
+      if d != d.round() {
+        return None
+      }
+      Some(d.to_int())
+    }
+  }
+}
+
+///|
+/// Parse an unsigned 16-bit literal (0..=65535), or `None`.
+fn parse_uint16(s : String) -> Int? {
+  match parse_double(s) {
+    None => None
+    Some(d) => {
+      if d < 0.0 || d > 65535.0 {
+        return None
+      }
+      if d != d.round() {
+        return None
+      }
+      Some(d.to_int())
+    }
+  }
+}
+
+///|
+/// Render an `Int` holding a 32-bit two's-complement value as its unsigned
+/// decimal form (`0..=4294967295`).
+fn unsigned32_str(v : Int) -> String {
+  if v >= 0 {
+    Int64::from_int(v).to_string()
+  } else {
+    (4294967296L + Int64::from_int(v)).to_string()
+  }
+}
+
+///|
 /// Hex value of a character, or `None` for non-hex input.
 fn hex_val(c : Char) -> Int? {
   if c >= '0' && c <= '9' {
@@ -407,15 +508,36 @@ fn bytes_str(bs : Array[Int]) -> String {
 }
 
 ///|
+/// Parse every token as a two-digit hex byte, or `None` if any token is bad.
+fn parse_hex_bytes(tokens : Array[String]) -> Array[Int]? {
+  let out : Array[Int] = []
+  for t in tokens {
+    match parse_hex_n(t, 2) {
+      None => return None
+      Some(b) => out.push(b)
+    }
+  }
+  Some(out)
+}
+
+///|
 /// Encode a numeric value into (or decode it from) Modbus register words.
+///
+/// `--encode` takes a VALUE; `--decode` takes positional hex tokens. Decoded
+/// tokens are read as words (4 hex digits, MSW first) OR, when the count points
+/// to a byte payload, as individual wire bytes (2 hex digits each) reassembled
+/// under the selected `--order` (and `--word-order` for 32-bit integers).
 fn run_encode(
   is_encode : Bool,
   ty : String,
   val : String,
-  words : Array[String],
+  tokens : Array[String],
   order_s : String,
+  word_order_s : String,
 ) -> Unit {
   let order = resolve_order(order_s)
+  let wo = @modbus_lint.word_order_of(word_order_s)
+  let woName = @modbus_lint.word_order_name(wo)
   if is_encode {
     match parse_double(val) {
       None => {
@@ -456,54 +578,256 @@ fn run_encode(
             "): " +
             bytes_str(bs),
           )
+        } else if ty == "int32" || ty == "uint32" {
+          let parsed = if ty == "int32" {
+            parse_int32(val)
+          } else {
+            parse_uint32(val)
+          }
+          match parsed {
+            None => {
+              println("invalid " + ty + ": " + val)
+              return
+            }
+            Some(v) => {
+              let (w0, w1) = @modbus_lint.int32_words(v, wo)
+              let bs = @modbus_lint.encode_int32_bytes(v, order, wo)
+              if ty == "int32" {
+                println("int32 = " + val)
+              } else {
+                println(
+                  "uint32 = " + val + " (unsigned " + unsigned32_str(v) + ")",
+                )
+              }
+              println(
+                "  words (" +
+                woName +
+                "): 0x" +
+                hex_word(w0) +
+                " 0x" +
+                hex_word(w1),
+              )
+              println(
+                "  bytes (" +
+                @modbus_lint.byte_order_name(order) +
+                " + " +
+                woName +
+                "): " +
+                bytes_str(bs),
+              )
+            }
+          }
+        } else if ty == "int16" || ty == "uint16" {
+          let parsed = if ty == "int16" {
+            parse_int16(val)
+          } else {
+            parse_uint16(val)
+          }
+          match parsed {
+            None => {
+              println("invalid " + ty + ": " + val)
+              return
+            }
+            Some(v) => {
+              let w = @modbus_lint.encode_uint16(v)
+              let bs = @modbus_lint.int16_bytes(v, order)
+              if ty == "int16" {
+                println("int16 = " + val + " (signed " + v.to_string() + ")")
+              } else {
+                println("uint16 = " + val)
+              }
+              println("  word: 0x" + hex_word(w))
+              println(
+                "  bytes (" +
+                @modbus_lint.byte_order_name(order) +
+                "): " +
+                bytes_str(bs),
+              )
+            }
+          }
         } else {
-          println("unknown type: " + ty + " (expected float32|float64)")
+          println(
+            "unknown type: " + ty + " (expected float32|float64|int32|uint32)",
+          )
         }
     }
-    // Decode: the trailing positional tokens are 4-hex-digit words, MSW first.
-  } else if ty == "float32" {
-    if words.length() == 2 {
-      let hi = parse_hex_n(words[0], 4)
-      let lo = parse_hex_n(words[1], 4)
+    return
+  }
+  // -------------------------------------------------------------------------
+  // Decode: tokens may be words (4 hex digits, MSW first) or, for a byte-count
+  // match, raw wire bytes (2 hex digits) reassembled under the selected order.
+  // -------------------------------------------------------------------------
+  if ty == "float32" {
+    if tokens.length() == 2 {
+      let hi = parse_hex_n(tokens[0], 4)
+      let lo = parse_hex_n(tokens[1], 4)
       match (hi, lo) {
-        (Some(h), Some(l)) => {
+        (Some(h), Some(l)) =>
           println(
             "float32 0x" +
-            words[0] +
+            tokens[0] +
             " 0x" +
-            words[1] +
+            tokens[1] +
             " = " +
             @modbus_lint.float32_from_words(h, l).to_string(),
           )
-          return
-        }
         _ => ()
       }
+    } else if tokens.length() == 4 {
+      match parse_hex_bytes(tokens) {
+        Some(bs) =>
+          println(
+            "float32 [" +
+            @modbus_lint.byte_order_name(order) +
+            "] = " +
+            @modbus_lint.float32_from_bytes(bs, order).to_string(),
+          )
+        None => println("float32 bytes must be two-digit hex")
+      }
+    } else {
+      println("float32 decode needs 2 words or 4 bytes")
     }
-    println(
-      "float32 decode needs 2 hex words (e.g. --decode float32 3fc0 0000)",
-    )
-  } else if ty == "float64" {
-    if words.length() == 4 {
-      let w0 = parse_hex_n(words[0], 4)
-      let w1 = parse_hex_n(words[1], 4)
-      let w2 = parse_hex_n(words[2], 4)
-      let w3 = parse_hex_n(words[3], 4)
+    return
+  }
+  if ty == "float64" {
+    if tokens.length() == 4 {
+      let w0 = parse_hex_n(tokens[0], 4)
+      let w1 = parse_hex_n(tokens[1], 4)
+      let w2 = parse_hex_n(tokens[2], 4)
+      let w3 = parse_hex_n(tokens[3], 4)
       match (w0, w1, w2, w3) {
-        (Some(a), Some(b), Some(c), Some(d)) => {
+        (Some(a), Some(b), Some(c), Some(d)) =>
           println(
             "float64 = " +
             @modbus_lint.float64_from_words(a, b, c, d).to_string(),
           )
-          return
+        _ => ()
+      }
+    } else if tokens.length() == 8 {
+      match parse_hex_bytes(tokens) {
+        Some(bs) =>
+          println(
+            "float64 [" +
+            @modbus_lint.byte_order_name(order) +
+            "] = " +
+            @modbus_lint.float64_from_bytes(bs, order).to_string(),
+          )
+        None => println("float64 bytes must be two-digit hex")
+      }
+    } else {
+      println("float64 decode needs 4 words or 8 bytes")
+    }
+    return
+  }
+  if ty == "int32" || ty == "uint32" {
+    if tokens.length() == 2 {
+      let hi = parse_hex_n(tokens[0], 4)
+      let lo = parse_hex_n(tokens[1], 4)
+      match (hi, lo) {
+        (Some(h), Some(l)) => {
+          let v = @modbus_lint.int32_fold_words(h, l, wo)
+          if ty == "int32" {
+            println(
+              "int32 0x" + tokens[0] + " 0x" + tokens[1] + " = " + v.to_string(),
+            )
+          } else {
+            println(
+              "uint32 0x" +
+              tokens[0] +
+              " 0x" +
+              tokens[1] +
+              " = " +
+              unsigned32_str(v),
+            )
+          }
         }
         _ => ()
       }
+      return
     }
-    println("float64 decode needs 4 hex words")
-  } else {
-    println("unknown type: " + ty + " (expected float32|float64)")
+    if tokens.length() == 4 {
+      match parse_hex_bytes(tokens) {
+        Some(bs) => {
+          let v = @modbus_lint.decode_int32_bytes(bs, order, wo)
+          if ty == "int32" {
+            println(
+              "int32 [" +
+              @modbus_lint.byte_order_name(order) +
+              " " +
+              woName +
+              "] = " +
+              v.to_string(),
+            )
+          } else {
+            println(
+              "uint32 [" +
+              @modbus_lint.byte_order_name(order) +
+              " " +
+              woName +
+              "] = " +
+              unsigned32_str(v),
+            )
+          }
+        }
+        None => println(ty + " bytes must be two-digit hex")
+      }
+      return
+    }
+    println(ty + " decode needs 2 words or 4 bytes")
+    return
   }
+  if ty == "int16" || ty == "uint16" {
+    if tokens.length() == 1 {
+      match parse_hex_n(tokens[0], 4) {
+        Some(w) => {
+          let wval = w & 0xFFFF
+          if ty == "int16" {
+            println(
+              "int16 0x" +
+              tokens[0] +
+              " = " +
+              @modbus_lint.decode_int16(wval).to_string(),
+            )
+          } else {
+            println(
+              "uint16 0x" +
+              tokens[0] +
+              " = " +
+              @modbus_lint.decode_uint16(wval).to_string(),
+            )
+          }
+        }
+        None => println("bad " + ty + " word (need 4 hex digits)")
+      }
+    } else if tokens.length() == 2 {
+      // Two two-digit tokens are read as a raw wire byte pair.
+      match parse_hex_bytes(tokens) {
+        Some(bs) => {
+          let wval = @modbus_lint.int16_from_bytes(bs, order) & 0xFFFF
+          if ty == "int16" {
+            println(
+              "int16 [" +
+              @modbus_lint.byte_order_name(order) +
+              "] = " +
+              @modbus_lint.decode_int16(wval).to_string(),
+            )
+          } else {
+            println(
+              "uint16 [" +
+              @modbus_lint.byte_order_name(order) +
+              "] = " +
+              @modbus_lint.decode_uint16(wval).to_string(),
+            )
+          }
+        }
+        None => println(ty + " bytes must be two-digit hex")
+      }
+    } else {
+      println(ty + " decode needs 1 word or 2 bytes")
+    }
+    return
+  }
+  println("unknown type: " + ty + " (expected float32|float64|int32|uint32)")
 }
 
 ///|

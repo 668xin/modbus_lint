@@ -70,6 +70,17 @@ pub fn byte_order_of(name : String) -> ByteOrder {
 }
 
 ///|
+/// Resolve a keyword ("hi-lo"/"lo-hi", case-insensitive) into a `WordOrder`,
+/// defaulting to native order (high word at the lower address).
+pub fn word_order_of(name : String) -> WordOrder {
+  if name == "lo-hi" || name == "lo" || name == "LowWordLowAddress" {
+    LowWordLowAddress
+  } else {
+    HighWordLowAddress
+  }
+}
+
+///|
 /// Human keyword for a word order, for reports and (de)serialization.
 pub fn word_order_name(order : WordOrder) -> String {
   match order {
@@ -141,6 +152,46 @@ pub fn decode_int16(word : Int) -> Int {
     u - 0x10000
   } else {
     u
+  }
+}
+
+///|
+/// The two bytes, in wire order for `byteOrder`, of a 16-bit value. This is the
+/// minimal Modbus payload a single register occupies on the bus.
+pub fn int16_bytes(v : Int, byteOrder : ByteOrder) -> Array[Int] {
+  let (hi, lo) = uint16_to_bytes(v & 0xFFFF, byteOrder)
+  [hi, lo]
+}
+
+///|
+/// Rebuild a 16-bit word from a two-byte wire payload (ints in 0..=255).
+pub fn int16_from_bytes(bytes : Array[Int], byteOrder : ByteOrder) -> Int {
+  bytes_to_uint16(bytes[0] & 0xFF, bytes[1] & 0xFF, byteOrder)
+}
+
+///|
+test "int16 byte payloads round trip and respect byte order" {
+  let be = int16_bytes(0x1234, BigEndian)
+  let le = int16_bytes(0x1234, LittleEndian)
+  assert_eq(be, [0x12, 0x34])
+  assert_eq(le, [0x34, 0x12])
+  assert_eq(int16_from_bytes(be, BigEndian), 0x1234)
+  assert_eq(int16_from_bytes(le, LittleEndian), 0x1234)
+  // A signed view of the same payload.
+  assert_eq(decode_int16(int16_from_bytes(be, BigEndian)), 4660)
+}
+
+///|
+test "int16 wire round trip covers signed extremes in both byte orders" {
+  let vals = [0, 1, -1, 32767, -32768, -248]
+  for v in vals {
+    for bo in [BigEndian, LittleEndian] {
+      let bs = int16_bytes(v, bo)
+      // Reassemble the unsigned word, then pull out the two's-complement sign.
+      let w = int16_from_bytes(bs, bo)
+      assert_eq(w & 0xFFFF, encode_int16(v))
+      assert_eq(decode_int16(w & 0xFFFF), v)
+    }
   }
 }
 
@@ -334,86 +385,17 @@ fn compose_words64(w0 : Int, w1 : Int, w2 : Int, w3 : Int) -> Int64 {
 }
 
 ///|
-/// IEEE-754 double-precision bits for a finite (or special) `Double`.
+/// IEEE-754 double-precision bits for `v`. This is an exact bit-preserving
+/// reinterpretation, so every pattern (normal, subnormal, ±0, ±Inf, NaN) is
+/// represented faithfully.
 fn double_bits(v : Double) -> Int64 {
-  if v != v {
-    // NaN: canonical quiet NaN (exponent all ones, top mantissa bit set).
-    return 0x7FF8000000000000L
-  }
-  let neg = if v < 0.0 {
-    true
-  } else if v == 0.0 {
-    1.0 / v < 0.0
-  } else {
-    false
-  }
-  let g = v.abs()
-  if g == 0.0 {
-    return if neg { 0x8000000000000000L } else { 0L }
-  }
-  if g > 1.7976931348623157e308 {
-    // Infinity: exponent all ones, mantissa zero.
-    let inf = 0x7FF0000000000000L
-    return if neg { inf | 0x8000000000000000L } else { inf }
-  }
-  // Normalise magnitude into [1, 2).
-  let mut m = g
-  let mut e2 = 0
-  if m >= 2.0 {
-    while m >= 2.0 {
-      m = m * 0.5
-      e2 = e2 + 1
-    }
-  } else if m < 1.0 {
-    while m < 1.0 {
-      m = m * 2.0
-      e2 = e2 - 1
-    }
-  }
-  let exp_field_raw = e2 + 1023
-  if exp_field_raw <= 0 {
-    // Subnormal: reproduce the value as raw scaled integer mantissa words.
-    let scaled = (g * @math.pow(2.0, 1074.0) + 0.5).to_int64()
-    let mant = scaled & 0xFFFFFFFFFFFFFL
-    let sign = if neg { 0x8000000000000000L } else { 0L }
-    return sign | mant
-  }
-  let frac = m - 1.0
-  let mut mant = (frac * 4503599627370496.0 + 0.5).to_int64()
-  let mut ef = exp_field_raw
-  if mant >= 4503599627370496L {
-    mant = 0L
-    ef = ef + 1
-  }
-  let exp = ef.to_int64() << 52
-  let sign = if neg { 0x8000000000000000L } else { 0L }
-  sign | exp | (mant & 0xFFFFFFFFFFFFFL)
+  v.reinterpret_as_int64()
 }
 
 ///|
-/// Rebuild a `Double` from its IEEE-754 bit pattern.
+/// Rebuild the exact `Double` from its IEEE-754 bit pattern.
 fn double_from_bits(b : Int64) -> Double {
-  let sign = (b >> 63) & 1L
-  let exp = (b >> 52) & 0x7FFL
-  let mant = b & 0xFFFFFFFFFFFFFL
-  let mag = if exp == 0L {
-    if mant == 0L {
-      0.0
-    } else {
-      // Subnormal: value = mant * 2^-1074.
-      mant.to_double() * @math.pow(2.0, -1074.0)
-    }
-  } else {
-    // value = (2^52 set + mant) * 2^(E - 1075).
-    let num = (4503599627370496L | mant).to_double()
-    let pow = exp.to_int() - 1075
-    num * @math.pow(2.0, pow.to_double())
-  }
-  if sign == 1L {
-    -mag
-  } else {
-    mag
-  }
+  b.reinterpret_as_double()
 }
 
 ///|
@@ -504,20 +486,38 @@ fn float32_from_bits(bits : Int) -> Double {
   let sign = (bits >> 31) & 1
   let exp = (bits >> 23) & 0xFF
   let mant = bits & 0x7FFFFF
-  let mag = if exp == 0 {
-    if mant == 0 {
+  if exp == 0 {
+    // Subnormal (or zero): value = mant * 2^-149, no implicit leading one.
+    let mag = if mant == 0 {
       0.0
     } else {
       mant.to_double() * @math.pow(2.0, -149.0)
     }
+    if sign == 1 {
+      -mag
+    } else {
+      mag
+    }
+  } else if exp == 0xFF {
+    // Special sentinel: all-ones exponent. Mantissa zero is ±Infinity, a
+    // non-zero mantissa is a NaN (any quiet NaN widens to a double NaN).
+    if mant == 0 {
+      if sign == 1 {
+        0xFFF0000000000000L.reinterpret_as_double()
+      } else {
+        0x7FF0000000000000L.reinterpret_as_double()
+      }
+    } else {
+      0x7FF8000000000001L.reinterpret_as_double()
+    }
   } else {
-    let num = (8388608 | mant).to_double()
-    num * @math.pow(2.0, (exp - 150).to_double())
-  }
-  if sign == 1 {
-    -mag
-  } else {
-    mag
+    let mag = (8388608 | mant).to_double() *
+      @math.pow(2.0, (exp - 150).to_double())
+    if sign == 1 {
+      -mag
+    } else {
+      mag
+    }
   }
 }
 
@@ -603,4 +603,87 @@ test "float32 encodes 1.5 to the expected words" {
   let (hi, lo) = float32_words(1.5)
   assert_eq(hi, 0x3FC0)
   assert_eq(lo, 0)
+}
+
+// ---------------------------------------------------------------------------
+// Integer boundary tests.
+// ---------------------------------------------------------------------------
+
+///|
+test "int32 extremes round trip through words and bytes" {
+  let vals = [2147483647, -2147483648, 0, -1, 1]
+  for v in vals {
+    let (hi, lo) = int32_words(v, HighWordLowAddress)
+    assert_eq(int32_fold_words(hi, lo, HighWordLowAddress), v)
+    for bo in [BigEndian, LittleEndian] {
+      for wo in [HighWordLowAddress, LowWordLowAddress] {
+        let bs = encode_int32_bytes(v, bo, wo)
+        assert_eq(decode_int32_bytes(bs, bo, wo), v)
+      }
+    }
+  }
+}
+
+///|
+test "uint32 bit patterns at the upper half of the range" {
+  // 0x7FFFFFFF.
+  let (hi1, lo1) = int32_parts(2147483647)
+  assert_eq(hi1, 0x7FFF)
+  assert_eq(lo1, 0xFFFF)
+  // 0x80000000 (bit 31 set) is -2147483648 in two's complement.
+  let (hi2, lo2) = int32_parts(-2147483648)
+  assert_eq(hi2, 0x8000)
+  assert_eq(lo2, 0x0000)
+  // 0xFFFFFFFF (all bits set) is -1 in two's complement.
+  let (hi3, lo3) = int32_parts(-1)
+  assert_eq(hi3, 0xFFFF)
+  assert_eq(lo3, 0xFFFF)
+  assert_eq(int32_fold(hi2, lo2), -2147483648)
+  assert_eq(int32_fold(hi3, lo3), -1)
+}
+
+// ---------------------------------------------------------------------------
+// Floating-point boundary tests.
+// ---------------------------------------------------------------------------
+
+///|
+test "float64 edge cases: largest, smallest normal, subnormal, inf, nan" {
+  let largest = 1.7976931348623157e308
+  let (l0, l1, l2, l3) = float64_words(largest)
+  assert_eq(float64_from_words(l0, l1, l2, l3), largest)
+  let smallest = 4.9406564584124654e-324
+  let (s0, s1, s2, s3) = float64_words(smallest)
+  assert_eq(float64_from_words(s0, s1, s2, s3), smallest)
+  // +Infinity produces the double pattern 0x7FF0 0000 0000 0000.
+  let (i0, i1, i2, i3) = float64_words(
+    0x7FF0000000000000L.reinterpret_as_double(),
+  )
+  assert_eq(i0, 0x7FF0)
+  assert_eq(i1, 0)
+  assert_eq(i2, 0)
+  assert_eq(i3, 0)
+  // NaN round trips: re-encoding its words still yields a NaN (self-unequal).
+  let nan = 0x7FF8000000000001L.reinterpret_as_double()
+  let (a, b, c, d) = float64_words(nan)
+  let nan2 = float64_from_words(a, b, c, d)
+  assert_eq(nan2 != nan2, true)
+}
+
+///|
+test "float32 edge cases: normal bounds, subnormal, inf, and NaN pattern" {
+  let hi_normal = 3.4028234663852886e38
+  let (h0, h1) = float32_words(hi_normal)
+  assert_eq(float32_from_words(h0, h1), hi_normal)
+  let lo_normal = 1.1754943508222875e-38
+  let (n0, n1) = float32_words(lo_normal)
+  assert_eq(float32_from_words(n0, n1), lo_normal)
+  // Smallest positive subnormal float32 is 2^-149.
+  let sub = 1.401298464324817e-45
+  let (u0, u1) = float32_words(sub)
+  assert_eq(float32_from_words(u0, u1), sub)
+  // Decoding the float32 +inf pattern gives a positive infinity.
+  assert_eq(float32_from_words(0x7F80, 0x0000) > 3.402823466e38, true)
+  // Decoding a quiet-NaN pattern yields a NaN (self-unequal).
+  let nan = float32_from_words(0x7FC0, 0x0000)
+  assert_eq(nan != nan, true)
 }

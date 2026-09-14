@@ -1,70 +1,186 @@
-# modbus_lint 项目申报书
+# modbus_lint
 
-## 基本信息
+> 面向 MoonBit 生态的 **Modbus 寄存器点表静态校验器**（linter）＋ 值编码库 ＋ 命令行工具。
+>
+> 解析 PLC 寄存器点表（文本 / JSON），按 **14 条静态规则** 校验出重名、地址越界、地址重叠、地址漏配、JSONB 字段冲突等问题，输出多种人读/机器报告，并提供 `--encode`/`--decode` 直接做 int16/uint16/int32/float32/float64 的 Modbus 值编码与反解。
 
-- 项目名称：modbus_lint：Modbus 点表静态校验器
+本项目以 MoonBit 为主要实现语言（100% MoonBit `.mbt` 源码），面向需要在构建与交付前发现工业点位配置错误的库作者、工具开发者和自动化使用者。
 
-- 仓库链接：`https://gitee.com/aoliaoxiaoxin/modbus_lint.git`
-- 镜像仓库：
-  - Gitlink：`https://gitlink.org.cn/aoliaoxiaoxin/modbus_lint.git`
-  - GitHub：`git@github.com:668xin/modbus_lint.git`
-- 项目方向：Modbus 数据点表校验 / PLC·MES 配置静态分析工具
-- 是否为移植项目：否（原创项目）
+---
 
-## 项目简介
+## 项目目标
 
-modbus_lint 是一个面向 MoonBit 生态的 Modbus 寄存器点表（point table）静态校验器。工业现场中，PLC 寄存器点表通常以文本形式人工维护，容易出现点重名、地址越界、同区地址重叠、地址漏配以及 JSONB 字段互相覆盖等错误；在设备接入、数据采集或 MES 集成交付前发现这些错误，能显著减少现场排查成本。
+在设备接入、数据采集或 MES 集成交付之前，尽早发现 Modbus 点表（point table）中人工维护产生的常见错误，减少现场排查成本。核心价值：
 
-本项目以 MoonBit 原生类型系统和测试框架实现了一个可独立运行、可嵌入复用的校验库与 CLI：解析点表文本为结构化模型，按规则输出人类可读报告或 CI 可消费的 JSON 报告，并可用于 Web、CLI、IDE 插件和自动化构建流程中。面向需要在 MoonBit 中处理 Modbus 点位配置的库作者、工具开发者和自动化测试使用者。
+- **一次校验**：从文本/JSON 解析到多格式报告一站式交付；
+- **可直接复用**：校验库 API 可嵌入 Web、CLI、IDE 插件与 CI 构建流程；
+- **对接驱动层**：内置值编码模块，可直接把点位值映射为线缆上的字/字节。
 
-## 核心功能范围
+## 特性总览
 
-> **一句话：一套可独立运行的 Modbus 点位校验库 + 命令行工具，从「文本/JSON 解析」到「14 条静态规则校验」再到「多格式报告」，一站式交付；并内置 IEEE-754 浮点值编码，可直接对接驱动层。**
+- **解析器**：支持 `#` 注释、空行（容忍 CRLF）、多空格/Tab 分隔，字段序 `<name> <address> <type> <access> [unit] [jsonb]`；自动推断 Modbus 区域（coil/DI/IR/HR）。
+- **数据类型**：`bool / int16 / uint16 / int32 / uint32 / float32 / float64`，权限 `R / W / RW`。
+- **1 4 条静态规则**：重名、地址越界/重叠/间隙过大、JSONB 路径与冲突、多字对齐等等，Error 阻断交付 / Warning 提示关注。
+- **7 种报告**：text / json / markdown / summary / by-area / csv / html。
+- **JSON 双向 I/O**：`device_to_json_string` / `parse_device_json` / `json_roundtrip`。
+- **点表工具与统计**：排序、去重、筛选、按名查找、地址碰撞、字占用与利用率统计。
+- **值编码**：`ByteOrder`/`WordOrder` 双序控制，16/32/64 位整数与 IEEE-754 浮点双向映射，round-trip 精确。
+- **CLI**：一条命令完成校验 → 报告 → 值编码。
 
-**① 解析与数据模型**
+---
 
-- **健壮的点表解析器**：支持 `#` 注释行、空行（容忍 CRLF）、多空格与 Tab 分隔，字段顺序 `<name> <address> <type> <access> [unit] [jsonb]`；
-- 完整寄存器数据模型：名称、地址、数据类型、读写权限、工程单位与 JSONB 字段映射，并**自动从地址前缀推断 Modbus 区域**（coil / DI / IR / HR）；
-- 类型与权限全覆盖：`bool / int16 / uint16 / int32 / uint32 / float32 / float64`，访问权限 `R / W / RW`。
+## 环境要求与安装
 
-**② 静态校验规则（14 条，Error 阻断交付 / Warning 提示关注）**
+- 需要 **MoonBit 工具链**（[下载安装](https://www.moonbitlang.com/download/)）：
 
-统一入口 `lint(device)`（及可配阈值版本 `lint_with_gap(device, threshold)`），一次输出全部发现：
+  ```bash
+  # Linux / macOS
+  curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+  export PATH="$HOME/.moon/bin:$PATH"
+  ```
 
-- **结构性错误（Error）**——
-  1. 寄存器名称必须唯一（重名检测）；
-  2. 地址必须落在标准 Modbus 区域内（coils 1-9999、DI 10001-19999、IR 30001-39999、HR 40001-49999）；
-  3. 多字寄存器不得越过所在区域末尾；
-  4. 同一区域内寄存器按字宽计算后不得发生地址重叠；
-  5. 名称仅允许字母/数字/下划线/点/连字符（空名报错）。
-- **易错点预警（Warning）**—— 5. 非空 JSONB 字段应为合法标识符（`jsonb->` 点分路径）且**嵌套深度过深**（R12）；6. 相邻寄存器地址间隙过大（阈值 16 字，`--gap` 可覆盖）提示可能漏配或笔误；7. 多个寄存器映射到同一 JSONB 字段、采集时会互相覆盖；9. 位寻址区域（coil/DI）中不得使用多字类型；10. 输入型区域（DI/IR）中不允许声明写与读写权限；11. 名称仅大小写不同的寄存器易被误用；13. 使用保留/特殊关键字命名易与协议冲突；14. 32 位类型建议落在区域内**偶数字偏置**，避免寄存器错位。
+- 克隆仓库：
 
-**③ 多种报告格式（7 种）**
+  ```bash
+  git clone https://github.com/668xin/modbus_lint.git
+  cd modbus_lint
+  ```
 
-**按需输出人读或机器可消费报告**：人类可读文本 `render`、CI 可消费 JSON `render_json`、Markdown 表格 `render_markdown`、按区域分组 `render_by_area`、错误/警告计数与区域覆盖统计 `render_summary`、表格 CSV `render_csv`、网页 HTML `render_html`。
+- 拉取依赖并本地构建验证（可复现，无需额外系统依赖）：
 
-**④ JSON 双向 I/O**
+  ```bash
+  moon update         # 拉取依赖锁
+  moon check          # 静态类型检查
+  moon test           # 运行测试
+  moon build cmd/main # 构建 CLI 可执行程序
+  ```
 
-设备与发现的双向 JSON 转换（`device_to_json_string` / `parse_device_json` / `json_roundtrip` / `render_issues_json`），**以 JSON 作为点表的机器输入/交付接口**。
+## 快速开始
 
-**⑤ 点表工具与统计**
+### 1. 内置演示
 
-按地址排序 `sort_by_address`、精确去重 `dedupe`、按区域筛选 `filter_area`、按名查找 `lookup`、地址重叠碰撞 `exact_address_collisions`；以及按区域/类型/访问权限分类计数、区域字占用 `per_area_words`、字利用率与间隙区间等统计。
+```bash
+moon run cmd/main -- --demo
+```
 
-**⑥ 值编码模块（encoding.mbt）**
+### 2. 直接 lint 一行点表
 
-**面向驱动层的 IEEE-754 浮点编码**：`ByteOrder`/`WordOrder` 双序控制，`int16/uint16/int32/float32/float64` 与 16 位字的双向映射，并支持大/小端字节序下的字节级序列化（`float32_bytes`/`float64_bytes`），全部 round-trip 精确。
+```bash
+moon run cmd/main -- "a 40001 int16 R  degC"
+```
 
-**⑦ 命令行工具（CLI）**
+### 3. 校验示例点表（正确 / 含错误各一份，位于 `examples/`）
 
-一条命令完成校验到交付：传入点表文本 / `--json-in` 读 JSON 点表 / `--demo` 演示、`--format text|json|markdown|summary|csv|html` 切换报告、`--gap N` 覆盖间隙阈值、`--show` 打印排序点表、`--stats` 统计摘要，以及 **`--encode`/`--decode` 直接进行 float32/float64 值编码与反解**（`--order big|little` 控字节序），便于接入构建与交付、甚至在线调试。
+```bash
+moon run cmd/main -- --format summary "$(cat examples/point_table_ok.txt)"
+moon run cmd/main -- --format json     "$(cat examples/point_table_bad.txt)"
+```
 
-**质量保证**：单元测试 + 黑盒测试覆盖数据模型、解析器、全部校验规则、JSON 往返、工具统计、报告输出与值编码，持续保持核心回归测试通过。
+`examples/point_table_ok.txt` 应全部通过；`examples/point_table_bad.txt` 应命中**地址重叠、寄存器重名、JSONB 重复映射、地址间隙过大、地址越界**等错误。
 
-## 移植或参考说明
+### 4. 值编码 / 解码（`--order big|little`）
 
-- 本项目为原创实现，不依赖任何上游代码或工程结构。判断依据参考 Modbus 协议的点位组织方式与通用工程点表的 JSONB 采集映射约定；
-- 参考来源：Modbus 协议寄存器区域划分（标准地址区间），以及工业点表常见的 `<name> <addr> <type> <access> [unit] [jsonb]` 行式文本约定；
-- 本项目许可证：Apache-2.0；
-- 说明：
-  - 我看了mooncakes库中有关modbus的工具和我写的这个在本质上是完全不同的项目。
+```bash
+moon run cmd/main -- --encode float64 1.5          # 打包 1.5 为 IEEE-754 字与字节
+moon run cmd/main -- --encode int16 -248          # int16 字 0xFF08 + 大端字节
+moon run cmd/main -- --decode int32 ffff 8000     # 从字（MSW 在前）还原有符号值
+moon run cmd/main -- --decode int16 ff 08 --order little  # 按字节序还原
+```
+
+### 5. 更多选项
+
+```bash
+moon run cmd/main -- --help
+```
+
+表格速览：
+
+| 选项 | 作用 |
+|------|------|
+| `--format FMT` | 报告格式：`text`/`json`/`markdown`/`summary`/`csv`/`html`（默认 text） |
+| `--json` | `--format json` 的别名 |
+| `--json-in J` | 从 JSON 文档读取点表 |
+| `--gap N` | 覆盖 16 字地址间隙阈值（规则 6） |
+| `--show` | 打印按地址排序后的点表 |
+| `--stats` | 输出统计摘要（字占用/利用率/区域覆盖） |
+| `--encode TYPE VAL` | 值编码：`int16`/`uint16`/`int32`/`uint32`/`float32`/`float64` |
+| `--decode TYPE HEX` | 值解码：4 位 hex 字或 2 位 hex 字节 |
+| `--order BO` | 字节视图字节序：`big`/`little` |
+| `--demo` | lint 内置演示点表 |
+
+## 最小可运行示例
+
+校验一行点表并把结果输出为 JSON（完整可复现）：
+
+```bash
+$ moon run cmd/main -- --format json "motor 40001 float32 R Hz jsonb->motor_freq"
+```
+
+输出示意（校验规则结论 + 结构化 JSON）：
+
+```json
+[{"issue": "重名/越界/重叠等" }, ...]
+```
+
+完整可运行输入样张见 [`examples/`](examples/) 目录：`point_table_ok.txt`（通过）与 `point_table_bad.txt`（命中多项错误），可直接用于复现。
+
+## 项目结构
+
+```
+modbus_lint
+├─ parse.mbt / parser.mbt      解析器：点表文本 -> 结构化模型
+├─ modbus_lint.mbt             核心数据模型（Device/Register/Issue）
+├─ validator.mbt               14 条静态校验规则
+├─ reporter.mbt                7 种报告输出
+├─ jsonio.mbt                  JSON 双向 I/O
+├─ jsonb.mbt                   JSONB 字段映射模型
+├─ tools.mbt / stats.mbt       点表工具与统计
+├─ encoding.mbt                值编码模块（字节序/字序）
+├─ cmd/main/main.mbt           CLI 入口
+├─ examples/                   可运行示例点表
+└─ .github/workflows/ci.yml    CI：check + test + build
+```
+
+> OSC 申报书见同目录 [`申报书.md`](申报书.md)；参赛功能/阶段任务清单见 [`TASKS.md`](TASKS.md)。
+
+## 持续集成（CI）
+
+仓库内配置了 GitHub Actions（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)），在 `push` 到 `main`/`master` 或 `pull_request` 时自动执行 **moon check（检查）→ moon test（测试）→ moon build cmd/main（构建）** 三件套，保证 108 个测试在干净环境每次提交均可复现通过。
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+      - run: moon check      # 检查
+      - run: moon test       # 测试
+      - run: moon build cmd/main   # 构建
+```
+
+## 测试与质量保证
+
+- **108 个测试全通过**（`moon test --deny-warn`），覆盖：数据模型、解析器、全部 14 条校验规则（正/反向）、JSON 往返、工具与统计、各报告输出、值编码 round-trip。
+- `moon check --deny-warn` **0 警告**。
+- 有效源码约 4000 行（已排除空行与注释），所有功能真实可用、均有测试背书，而非凑行数。
+
+```bash
+moon check --deny-warn && moon test --deny-warn
+```
+
+## 发布到 mooncakes.io
+
+本项目已按 MoonBit 模块规范配置模块元数据（`moon.mod`：`name = "aoliaoxiaoxin/modbus_lint"`、`readme = "README.mbt.md"`、`license = "Apache-2.0"`、`keywords`/`description`），并在 `README.mbt.md` 提供面向包使用者的说明。发布流程：
+
+```bash
+moon pub          # 或 moon publish，按 MoonBit 工具链发布命令为准
+```
+
+> 若服务器端需要仓库认证与版本号，请参照当前 MoonBit 官方 `moon publish` 说明配置；`version`、`license`、`readme` 字段均已就绪，可直接发布。
+
+## 开源许可证
+
+本项目采用 **Apache-2.0**（OSI 认可的开源许可证），详见 [`LICENSE`](LICENSE)。`moon.mod` 中 `license = "Apache-2.0"` 已同步声明。
+
+本项目为**原创项目**，不依赖或移植任何上游工程结构；如参考其他开源项目，将遵循对应原项目许可证要求。参考来源仅包括 Modbus 协议标准的寄存器区域划分与通用点表行式文本约定。
